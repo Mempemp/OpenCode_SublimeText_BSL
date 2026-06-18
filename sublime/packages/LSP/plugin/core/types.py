@@ -1,0 +1,1236 @@
+from __future__ import annotations
+
+from ...protocol import DocumentFilter
+from ...protocol import DocumentSelector
+from ...protocol import DocumentUri
+from ...protocol import FileOperationFilter
+from ...protocol import FileOperationPatternKind
+from ...protocol import NotebookCellTextDocumentFilter
+from ...protocol import ServerCapabilities
+from ...protocol import TextDocumentSyncKind
+from ...protocol import TextDocumentSyncOptions
+from ...protocol import URI
+from .collections import DottedDict
+from .constants import LANGUAGE_IDENTIFIERS
+from .constants import MarkdownLangMap
+from .logging import debug
+from .logging import set_debug_logging
+from .transports import StdioTransportConfig
+from .transports import TcpClientTransportConfig
+from .transports import TcpServerTransportConfig
+from .transports import TransportConfig
+from .url import filename_to_uri
+from .url import parse_uri
+from abc import ABC
+from abc import abstractmethod
+from copy import deepcopy
+from dataclasses import dataclass
+from typing import Any
+from typing import Callable
+from typing import cast
+from typing import Dict
+from typing import Final
+from typing import Generator
+from typing import Iterable
+from typing import List
+from typing import TYPE_CHECKING
+from typing import TypedDict
+from typing import TypeVar
+from typing_extensions import deprecated
+from typing_extensions import NotRequired
+from typing_extensions import override
+from typing_extensions import TypeGuard
+from wcmatch.glob import BRACE
+from wcmatch.glob import globmatch
+from wcmatch.glob import GLOBSTAR
+from wcmatch.glob import IGNORECASE
+import contextlib
+import fnmatch
+import os
+import posixpath
+import re
+import sublime
+import time
+
+if TYPE_CHECKING:
+    from .file_watcher import FileWatcherEventType
+    from .workspace import WorkspaceFolder
+
+FEATURES_TIMEOUT = 300  # milliseconds
+
+PANEL_FILE_REGEX = r"^(\S.*):$"
+PANEL_LINE_REGEX = r"^\s+(\d+):(\d+)"
+
+
+MarkdownLangMapJson = Dict[str, List[List[str]]]
+
+
+class FileWatcherConfig(TypedDict):
+    patterns: list[str]
+    events: NotRequired[list[FileWatcherEventType]]
+    ignores: NotRequired[list[str]]
+
+
+class ViewStatusHandler(ABC):
+
+    @abstractmethod
+    def on_view_status_changed(self, config_name: str, view: sublime.View, status: str | None) -> None:
+        ...
+
+
+def basescope2languageid(base_scope: str) -> str:
+    # This the connection between Language IDs and ST selectors.
+    base_scope_map = sublime.load_settings("language-ids.sublime-settings")
+    result = ""
+    # Try to find exact match or less specific match consisting of at least 2 components.
+    scope_parts = base_scope.split('.')
+    # TODO: remove base_scope_map in the next minor release
+    language_map = {**LANGUAGE_IDENTIFIERS, **base_scope_map.to_dict()}
+    while len(scope_parts) >= 2:
+        result = language_map.get('.'.join(scope_parts))
+        if result:
+            break
+        scope_parts.pop()
+    if not result:
+        # If no match, use the second component of the scope as the language ID.
+        scope_parts = base_scope.split('.')
+        result = scope_parts[1] if len(scope_parts) > 1 else scope_parts[0]
+    return result if isinstance(result, str) else ""
+
+
+@contextlib.contextmanager
+def runtime(token: str) -> Generator[None, None, None]:
+    t = time.time()
+    try:
+        yield
+    finally:
+        debug(token, "running time:", int((time.time() - t) * 1000000), "μs")
+
+
+T = TypeVar("T")
+
+
+def diff(old: Iterable[T], new: Iterable[T]) -> tuple[set[T], set[T]]:
+    """Return a tuple of (added, removed) items."""
+    old_set = old if isinstance(old, set) else set(old)
+    new_set = new if isinstance(new, set) else set(new)
+    added = new_set - old_set
+    removed = old_set - new_set
+    return added, removed
+
+
+def matches_pattern(path: str, patterns: Any) -> bool:
+    if not isinstance(patterns, list):
+        return False
+    for pattern in patterns:
+        if not isinstance(pattern, str):
+            continue
+        if fnmatch.fnmatch(path, pattern):
+            return True
+    return False
+
+
+def sublime_pattern_to_glob(pattern: str, *, is_directory_pattern: bool, root_path: str | None = None) -> str:
+    """
+    Convert a Sublime Text pattern (http://www.sublimetext.com/docs/file_patterns.html)
+    to a glob pattern that utilizes globstar extension.
+    """
+    glob = pattern
+    if '/' not in glob:  # basic pattern: compared against exact file or directory name
+        glob = f'**/{glob}'
+        if is_directory_pattern:
+            glob += '/**'
+    else:  # complex pattern
+        # With '*/' or '/*' sequence, the '*' matches '/' characters.
+        glob = re.sub(r'(?<!\*)\*/', '*/**/', glob)
+        glob = re.sub(r'/\*(?!\*)', '/**/*', glob)
+        # If a pattern ends in '/' it will be treated as a directory pattern, and will match both a directory with that
+        # name and any contained files or subdirectories.
+        if glob.endswith('/'):
+            glob += '**'
+        # If a pattern begins with a single /, it will be treated as an absolute path.
+        if not glob.startswith('/') and not glob.startswith('**/'):
+            glob = f'**/{glob}'
+        if is_directory_pattern and not glob.endswith('/**'):
+            glob += '/**'
+        # If pattern begins with '//', it will be compared as a relative path from the project root.
+        if glob.startswith('//') and root_path:
+            glob = posixpath.join(root_path.replace('\\', '/'), glob[2:])
+        # Question mark also matches slashes.
+        glob = glob.replace('?', '{?,/}')
+        # Compact pattern to remove redundant repeated globs
+        glob = re.sub(r'\*\*/(\*\*?/)+', '**/', glob)
+        glob = re.sub(r'(/\*\*?)+/\*\*', '/**', glob)
+    return glob
+
+
+def debounced(f: Callable[[], Any], timeout_ms: int = 0, condition: Callable[[], bool] = lambda: True,
+              async_thread: bool = False) -> None:
+    """
+    Possibly run a function at a later point in time, either on the async thread or on the main thread.
+
+    :param      f:             The function to possibly run. Its return type is discarded.
+    :param      timeout_ms:    The time in milliseconds after which to possibly to run the function
+    :param      condition:     The condition that must evaluate to True in order to run the function
+    :param      async_thread:  If true, run the function on the async worker thread, otherwise run the function on the
+                               main thread
+    """
+
+    def run() -> None:
+        if condition():
+            f()
+
+    runner = sublime.set_timeout_async if async_thread else sublime.set_timeout
+    runner(run, timeout_ms)
+
+
+@dataclass
+class SettingsStore:
+    settings: sublime.Settings
+    settings_path: str
+
+
+class SettingsRegistration:
+    __slots__ = ("settings", )
+
+    def __init__(self, settings: sublime.Settings, on_change: Callable[[], None]) -> None:
+        self.settings = settings
+        self.settings.add_on_change("LSP", on_change)
+
+    def unregister(self) -> None:
+        self.settings.clear_on_change("LSP")
+
+
+class DebouncerNonThreadSafe:
+    """
+    Debouncer for delaying execution of a function until specified timeout time.
+
+    When calling `debounce()` multiple times, if the time span between calls is shorter than the specified `timeout_ms`,
+    the callback function will only be called once, after `timeout_ms` since the last call.
+
+    This implementation is not thread safe. You must ensure that `debounce()` is called from the same thread as
+    was chosen during initialization through the `async_thread` argument.
+    """
+
+    def __init__(self, async_thread: bool) -> None:
+        self._async_thread = async_thread
+        self._current_id = -1
+        self._next_id = 0
+
+    def debounce(
+        self, f: Callable[[], None], timeout_ms: int = 0, condition: Callable[[], bool] = lambda: True
+    ) -> None:
+        """
+        Possibly run a function at a later point in time on the thread chosen during initialization.
+
+        :param      f:             The function to possibly run
+        :param      timeout_ms:    The time in milliseconds after which to possibly to run the function
+        :param      condition:     The condition that must evaluate to True in order to run the function
+        """
+
+        def run(debounce_id: int) -> None:
+            if debounce_id != self._current_id:
+                return
+            if condition():
+                f()
+
+        runner = sublime.set_timeout_async if self._async_thread else sublime.set_timeout
+        current_id = self._current_id = self._next_id
+        self._next_id += 1
+        runner(lambda: run(current_id), timeout_ms)
+
+    def cancel_pending(self) -> None:
+        self._current_id = -1
+
+
+def read_dict_setting(settings_obj: sublime.Settings, key: str, default: dict) -> dict:
+    val = settings_obj.get(key)
+    return val if isinstance(val, dict) else default
+
+
+def read_list_setting(settings_obj: sublime.Settings, key: str, default: list) -> list:
+    val = settings_obj.get(key)
+    return val if isinstance(val, list) else default
+
+
+class Settings:
+
+    completion_insert_mode = cast("str", None)
+    diagnostics_additional_delay_auto_complete_ms = cast("int", None)
+    diagnostics_delay_ms = cast("int", None)
+    diagnostics_gutter_marker = cast("str", None)
+    diagnostics_highlight_style = cast("str | dict[str, str]", None)
+    diagnostics_panel_include_severity_level = cast("int", None)
+    disabled_capabilities = cast("list[str]", None)
+    document_highlight_style = cast("str", None)
+    format_on_type = cast("bool", None)
+    hover_highlight_style = cast("str", None)
+    inhibit_snippet_completions = cast("bool", None)
+    inhibit_word_completions = cast("bool", None)
+    initially_folded = cast("list[str]", None)
+    inlay_hints_max_length = cast("int", None)
+    link_highlight_style = cast("str", None)
+    log_debug = cast("bool", None)
+    log_max_size = cast("int", None)
+    log_server = cast("list[str]", None)
+    lsp_code_actions_on_format = cast("dict[str, bool]", None)
+    lsp_code_actions_on_save = cast("dict[str, bool]", None)
+    lsp_format_on_paste = cast("bool", None)
+    lsp_format_on_save = cast("bool", None)
+    on_save_task_timeout_ms = cast("int", None)
+    only_show_lsp_completions = cast("bool", None)
+    popup_max_characters_height = cast("int", None)
+    popup_max_characters_width = cast("int", None)
+    refactoring_auto_save = cast("str", None)
+    semantic_highlighting = cast("bool", None)
+    show_code_actions = cast("str", None)
+    show_code_actions_in_hover = cast("bool", None)
+    show_code_lens = cast("str", None)
+    show_diagnostics_annotations_severity_level = cast("int", None)
+    show_diagnostics_count_in_view_status = cast("bool", None)
+    show_diagnostics_in_hover = cast("bool", None)
+    show_diagnostics_in_view_status = cast("bool", None)
+    show_diagnostics_panel_on_save = cast("int", None)
+    show_diagnostics_severity_level = cast("int", None)
+    show_inlay_hints = cast("bool", None)
+    show_multiline_diagnostics_highlights = cast("bool", None)
+    show_multiline_document_highlights = cast("bool", None)
+    show_references_in_quick_panel = cast("bool", None)
+    show_signature_help = cast("bool", None)
+    show_symbol_action_links = cast("bool", None)
+    show_view_status = cast("bool", None)
+
+    def __init__(self, s: sublime.Settings) -> None:
+        self.update(s)
+
+    def update(self, s: sublime.Settings) -> None:
+        def r(name: str, default: bool | int | str | list | dict) -> None:
+            val = s.get(name)
+            setattr(self, name, val if isinstance(val, default.__class__) else default)
+
+        r("completion_insert_mode", 'insert')
+        r("diagnostics_additional_delay_auto_complete_ms", 0)
+        r("diagnostics_delay_ms", 0)
+        r("diagnostics_gutter_marker", "dot")
+        r("diagnostics_panel_include_severity_level", 4)
+        r("disabled_capabilities", [])
+        r("document_highlight_style", "underline")
+        r("format_on_type", False)
+        r("hover_highlight_style", "")
+        r("initially_folded", [])
+        r("inlay_hints_max_length", 30)
+        r("link_highlight_style", "underline")
+        r("log_debug", False)
+        r("log_max_size", 8 * 1024)
+        r("lsp_code_actions_on_format", {})
+        r("lsp_code_actions_on_save", {})
+        r("lsp_format_on_paste", False)
+        r("lsp_format_on_save", False)
+        r("on_save_task_timeout_ms", 2000)
+        r("only_show_lsp_completions", False)
+        r("popup_max_characters_height", 1000)
+        r("popup_max_characters_width", 120)
+        r("refactoring_auto_save", "never")
+        r("semantic_highlighting", False)
+        r("show_code_actions", "annotation")
+        r("show_code_actions_in_hover", True)
+        r("show_code_lens", "annotation")
+        r("show_diagnostics_annotations_severity_level", 0)
+        r("show_diagnostics_count_in_view_status", False)
+        r("show_diagnostics_in_hover", True)
+        r("show_diagnostics_in_view_status", True)
+        r("show_diagnostics_panel_on_save", 0)
+        r("show_diagnostics_severity_level", 2)
+        r("show_inlay_hints", False)
+        r("show_multiline_diagnostics_highlights", True)
+        r("show_multiline_document_highlights", True)
+        r("show_references_in_quick_panel", True)
+        r("show_signature_help", True)
+        r("show_symbol_action_links", False)
+        r("show_view_status", True)
+
+        # Backwards-compatible with the bool setting
+        log_server = s.get("log_server")
+        if isinstance(log_server, bool):
+            self.log_server = ["panel"] if log_server else []
+        elif isinstance(log_server, list):
+            self.log_server = log_server
+        else:
+            self.log_server = []
+
+        # Backwards-compatible with the bool setting
+        auto_show_diagnostics_panel = s.get("auto_show_diagnostics_panel")
+        if isinstance(auto_show_diagnostics_panel, bool):
+            if not auto_show_diagnostics_panel:
+                self.show_diagnostics_panel_on_save = 0
+        elif isinstance(auto_show_diagnostics_panel, str):
+            if auto_show_diagnostics_panel == "never":
+                self.show_diagnostics_panel_on_save = 0
+
+        # Backwards-compatible with "only_show_lsp_completions"
+        only_show_lsp_completions = s.get("only_show_lsp_completions")
+        if isinstance(only_show_lsp_completions, bool):
+            self.inhibit_snippet_completions = only_show_lsp_completions
+            self.inhibit_word_completions = only_show_lsp_completions
+        else:
+            r("inhibit_snippet_completions", False)
+            r("inhibit_word_completions", True)
+
+        # correctness checking will happen inside diagnostics_highlight_style_flags method
+        self.diagnostics_highlight_style = s.get("diagnostics_highlight_style")  # type: ignore
+
+        # Backwards-compatible with "show_diagnostics_highlights"
+        if s.get("show_diagnostics_highlights") is False:
+            self.diagnostics_highlight_style = ""
+
+        # Backwards-compatible with "code_action_on_save_timeout_ms"
+        code_action_on_save_timeout_ms = s.get("code_action_on_save_timeout_ms")
+        if isinstance(code_action_on_save_timeout_ms, int):
+            self.on_save_task_timeout_ms = code_action_on_save_timeout_ms
+
+        set_debug_logging(self.log_debug)
+
+    def highlight_style_region_flags(self, style_str: str) -> tuple[sublime.RegionFlags, sublime.RegionFlags]:
+        default = sublime.RegionFlags.NO_UNDO
+        if style_str in {"background", "fill"}:  # Backwards-compatible with "fill"
+            style = default | sublime.RegionFlags.DRAW_NO_OUTLINE
+            return style, style
+        if style_str == "outline":
+            style = default | sublime.RegionFlags.DRAW_NO_FILL
+            return style, style
+        if style_str == "stippled":
+            return default | sublime.RegionFlags.DRAW_NO_FILL, default | sublime.RegionFlags.DRAW_NO_FILL | sublime.RegionFlags.DRAW_NO_OUTLINE | sublime.RegionFlags.DRAW_STIPPLED_UNDERLINE  # noqa: E501
+        return default | sublime.RegionFlags.DRAW_NO_FILL, default | sublime.RegionFlags.DRAW_NO_FILL | sublime.RegionFlags.DRAW_NO_OUTLINE | sublime.RegionFlags.DRAW_SOLID_UNDERLINE  # noqa: E501
+
+    @staticmethod
+    def _style_str_to_flag(style_str: str) -> sublime.RegionFlags | None:
+        default = sublime.RegionFlags.DRAW_EMPTY_AS_OVERWRITE | sublime.RegionFlags.DRAW_NO_FILL | sublime.RegionFlags.NO_UNDO  # noqa: E501
+        # This method could be a dict or lru_cache
+        if not style_str:
+            return default | sublime.RegionFlags.DRAW_NO_OUTLINE
+        if style_str == "box":
+            return default
+        if style_str == "underline":
+            return default | sublime.RegionFlags.DRAW_NO_OUTLINE | sublime.RegionFlags.DRAW_SOLID_UNDERLINE
+        if style_str == "stippled":
+            return default | sublime.RegionFlags.DRAW_NO_OUTLINE | sublime.RegionFlags.DRAW_STIPPLED_UNDERLINE
+        if style_str == "squiggly":
+            return default | sublime.RegionFlags.DRAW_NO_OUTLINE | sublime.RegionFlags.DRAW_SQUIGGLY_UNDERLINE
+        # default style (includes NO_UNDO)
+        return None
+
+    def diagnostics_highlight_style_flags(self) -> list[sublime.RegionFlags | None]:
+        """Returns flags for highlighting diagnostics on single lines per severity."""
+        if isinstance(self.diagnostics_highlight_style, str):
+            # same style for all severity levels
+            return [self._style_str_to_flag(self.diagnostics_highlight_style)] * 4
+        if isinstance(self.diagnostics_highlight_style, dict):
+            flags: list[sublime.RegionFlags | None] = []
+            for sev in ("error", "warning", "info", "hint"):
+                user_style = self.diagnostics_highlight_style.get(sev)
+                if user_style is None:  # user did not provide a style
+                    flags.append(None)  # default styling, see comment below
+                else:
+                    flags.append(self._style_str_to_flag(user_style))
+            return flags
+        # Defaults are defined in DIAGNOSTIC_STYLES in plugin/core/views.py
+        return [None] * 4  # default styling
+
+
+@dataclass
+class SemanticToken:
+    region: sublime.Region
+    type: str
+    modifiers: list[str]
+
+
+class ClientStates:
+    STARTING = 0
+    READY = 1
+    STOPPING = 2
+
+
+def is_notebook_cell_text_document_filter(document_filter: DocumentFilter) -> TypeGuard[NotebookCellTextDocumentFilter]:
+    return 'notebook' in document_filter
+
+
+class DocumentFilterMatcher:
+    """
+    A document filter denotes a document through properties like language, scheme or pattern.
+
+    An example is a filter that applies to TypeScript files on disk. Another example is a filter that applies to JSON
+    files with name package.json:
+
+        { "language": "typescript", scheme: "file" }
+        { "language": "json", "pattern": "**/package.json" }
+
+    Sublime Text doesn't understand what a language ID is, so we have to maintain a global translation map from language
+    IDs to selectors. Sublime Text also has no support for patterns. We use the wcmatch library for this.
+    """
+
+    __slots__ = ("language", "scheme", "pattern")
+
+    def __init__(
+        self,
+        language: str | None = None,
+        scheme: str | None = None,
+        pattern: str | None = None
+    ) -> None:
+        self.scheme = scheme
+        self.pattern = pattern
+        self.language = language
+
+    def __call__(self, view: sublime.View) -> bool:
+        """Does this filter match the view? An empty filter matches any view."""
+        if self.language:
+            syntax = view.syntax()
+            if not syntax or basescope2languageid(syntax.scope) != self.language:
+                return False
+        if self.scheme:
+            uri = view.settings().get("lsp_uri")
+            if isinstance(uri, str) and parse_uri(uri)[0] != self.scheme:
+                return False
+        if self.pattern:
+            if not globmatch(view.file_name() or "", self.pattern, flags=GLOBSTAR | BRACE):
+                return False
+        return True
+
+
+class DocumentSelectorMatcher:
+    """
+    A DocumentSelector is a list of DocumentFilters. A view matches a DocumentSelector if and only if any one of its
+    filters matches against the view.
+    """
+
+    __slots__ = ("filters",)
+
+    def __init__(self, document_selector: DocumentSelector) -> None:
+        self.filters = [
+            DocumentFilterMatcher(**cast("dict", document_filter)) for document_filter in document_selector
+            if not is_notebook_cell_text_document_filter(document_filter)
+        ]
+
+    def __bool__(self) -> bool:
+        return bool(self.filters)
+
+    def matches(self, view: sublime.View) -> bool:
+        """Does this selector match the view? A selector with no filters matches all views."""
+        return any(f(view) for f in self.filters) if self.filters else True
+
+
+def match_file_operation_filters(filters: list[FileOperationFilter], uri: URI) -> bool:
+    def matches(file_operation_filter: FileOperationFilter) -> bool:
+        uri_scheme, file_name = parse_uri(uri)
+        pattern = file_operation_filter['pattern']
+        scheme = file_operation_filter.get('scheme')
+        if scheme and uri_scheme != scheme:
+            return False
+        matches = pattern.get('matches')
+        if matches == FileOperationPatternKind.File and not os.path.isfile(file_name):
+            return False
+        if matches == FileOperationPatternKind.Folder and not os.path.isdir(file_name):
+            return False
+        options = pattern.get('options', {})
+        flags = GLOBSTAR | BRACE
+        if options.get('ignoreCase', False):
+            flags |= IGNORECASE
+        return globmatch(file_name, pattern['glob'], flags=flags)
+
+    return any(matches(filter_) for filter_ in filters)
+
+
+# method -> (capability dotted path, optional registration dotted path)
+# these are the EXCEPTIONS. The general rule is: method foo/bar --> (barProvider, barProvider.id)
+_METHOD_TO_CAPABILITY_EXCEPTIONS: dict[str, tuple[str, str | None]] = {
+    'workspace/symbol': ('workspaceSymbolProvider', None),
+    'workspace/didChangeConfiguration': ('workspace.didChangeConfiguration', None),
+    'workspace/didChangeWorkspaceFolders': ('workspace.workspaceFolders',
+                                            'workspace.workspaceFolders.changeNotifications'),
+    'textDocument/didOpen': ('textDocumentSync.didOpen', None),
+    'textDocument/didClose': ('textDocumentSync.didClose', None),
+    'textDocument/didChange': ('textDocumentSync.change', None),
+    'textDocument/didSave': ('textDocumentSync.save', None),
+    'textDocument/willSave': ('textDocumentSync.willSave', None),
+    'textDocument/willSaveWaitUntil': ('textDocumentSync.willSaveWaitUntil', None),
+    'textDocument/formatting': ('documentFormattingProvider', None),
+    'textDocument/documentColor': ('colorProvider', None)
+}
+
+
+@deprecated('Remove once lsp_utils drops it from the code')
+def method2attr(method: str) -> str:
+    # window/messageRequest -> m_window_messageRequest
+    # $/progress -> m___progress
+    # client/registerCapability -> m_client_registerCapability
+    return 'm_' + ''.join(c if c.isalpha() else '_' for c in method)
+
+
+def method_to_capability(method: str) -> tuple[str, str]:
+    """
+    Given a method, returns the corresponding capability path, and the associated path to stash the registration key.
+
+    Examples:
+        textDocument/definition --> (definitionProvider, definitionProvider.id)
+        textDocument/references --> (referencesProvider, referencesProvider.id)
+        textDocument/didOpen --> (textDocumentSync.didOpen, textDocumentSync.didOpen.id)
+    """
+    capability_path, registration_path = _METHOD_TO_CAPABILITY_EXCEPTIONS.get(method, (None, None))
+    if capability_path is None:
+        capability_path = method.split('/')[1] + "Provider"
+    if registration_path is None:
+        # This path happens to coincide with the StaticRegistrationOptions' id, which is on purpose. As a consequence,
+        # if a server made a "registration" via the initialize response, it can call client/unregisterCapability at
+        # a later date, and the capability will pop from the capabilities dict.
+        registration_path = capability_path + ".id"
+    return capability_path, registration_path
+
+
+def normalize_text_sync(textsync: TextDocumentSyncOptions | TextDocumentSyncKind | None) -> dict[str, Any]:
+    """Brings legacy text sync capabilities to the most modern format."""
+    result: dict[str, Any] = {}
+    if isinstance(textsync, int):
+        change = {"syncKind": textsync}
+        result["textDocumentSync"] = {"didOpen": {}, "save": {}, "didClose": {}, "change": change}
+    elif isinstance(textsync, dict):
+        new = {}
+        change = textsync.get("change")
+        if isinstance(change, int):
+            new["change"] = {"syncKind": change}
+        elif isinstance(change, dict):
+            new["change"] = change
+
+        def maybe_assign_bool_or_dict(key: str) -> None:
+            assert isinstance(textsync, dict)
+            value = textsync.get(key)
+            if isinstance(value, bool) and value:
+                new[key] = {}
+            elif isinstance(value, dict):
+                new[key] = value
+
+        open_close = textsync.get("openClose")
+        if isinstance(open_close, bool):
+            if open_close:
+                new["didOpen"] = {}
+                new["didClose"] = {}
+        else:
+            maybe_assign_bool_or_dict("didOpen")
+            maybe_assign_bool_or_dict("didClose")
+        maybe_assign_bool_or_dict("willSave")
+        maybe_assign_bool_or_dict("willSaveWaitUntil")
+        maybe_assign_bool_or_dict("save")
+        result["textDocumentSync"] = new
+    return result
+
+
+class Capabilities(DottedDict):
+    """
+    Maintains static and dynamic capabilities.
+
+    Static capabilities come from a response to the initialize request (from Client -> Server).
+    Dynamic capabilities can be registered at any moment with client/registerCapability and client/unregisterCapability
+    (from Server -> Client).
+    """
+
+    def register(
+        self,
+        registration_id: str,
+        capability_path: str,
+        registration_path: str,
+        options: dict[str, Any]
+    ) -> None:
+        stored_registration_id = self.get(registration_path)
+        if isinstance(stored_registration_id, str):
+            msg = "{} is already registered at {} with ID {}, overwriting"
+            debug(msg.format(capability_path, registration_path, stored_registration_id))
+        self.set(capability_path, options)
+        self.set(registration_path, registration_id)
+
+    def unregister(
+        self,
+        registration_id: str,
+        capability_path: str,
+        registration_path: str
+    ) -> dict[str, Any] | None:
+        stored_registration_id = self.get(registration_path)
+        if not isinstance(stored_registration_id, str):
+            debug("stored registration ID at", registration_path, "is not a string")
+            return None
+        if stored_registration_id != registration_id:
+            msg = "stored registration ID ({}) is not the same as the provided registration ID ({})"
+            debug(msg.format(stored_registration_id, registration_id))
+            return None
+        discarded = self.get(capability_path)
+        self.remove(capability_path)
+        self.remove(registration_path)
+        return discarded
+
+    def assign(self, d: ServerCapabilities) -> None:
+        textsync = normalize_text_sync(d.pop("textDocumentSync", None))
+        super().assign(cast("dict", d))
+        if textsync:
+            self.update(textsync)
+
+    def should_notify_did_open(self) -> bool:
+        return "textDocumentSync.didOpen" in self
+
+    def text_sync_kind(self) -> TextDocumentSyncKind:
+        value: TextDocumentSyncKind = self.get("textDocumentSync.change.syncKind")
+        return value if isinstance(value, int) else TextDocumentSyncKind.None_
+
+    def should_notify_did_change_configuration(self) -> bool:
+        return 'workspace.didChangeConfiguration' in self
+
+    def should_notify_did_change_workspace_folders(self) -> bool:
+        return "workspace.workspaceFolders.changeNotifications" in self
+
+    def should_notify_will_save(self) -> bool:
+        return "textDocumentSync.willSave" in self
+
+    def should_notify_did_save(self) -> tuple[bool, bool]:
+        save = self.get("textDocumentSync.save")
+        if isinstance(save, bool):
+            return save, False
+        if isinstance(save, dict):
+            return True, bool(save.get("includeText"))
+        return False, False
+
+    def should_notify_did_close(self) -> bool:
+        return "textDocumentSync.didClose" in self
+
+
+def _translate_path(path: str, source: str, destination: str) -> tuple[str, bool]:
+    # TODO: Case-insensitive file systems. Maybe this problem needs a much larger refactor. Even Sublime Text doesn't
+    # handle case-insensitive file systems correctly. There are a few other places where case-sensitivity matters, for
+    # example when looking up the correct view for diagnostics, and when finding a view for goto-def.
+    if path.startswith(source) and len(path) > len(source) and path[len(source)] in {"/", "\\"}:
+        return path.replace(source, destination, 1), True
+    return path, False
+
+
+class PathMap:
+
+    __slots__ = ("_local", "_remote")
+
+    def __init__(self, local: str, remote: str) -> None:
+        self._local = local
+        self._remote = remote
+
+    @classmethod
+    def parse(cls, json: Any) -> list[PathMap] | None:
+        if not isinstance(json, list):
+            return None
+        result: list[PathMap] = []
+        for path_map in json:
+            if not isinstance(path_map, dict):
+                debug('path map entry is not an object')
+                continue
+            local = path_map.get("local")
+            if not isinstance(local, str):
+                debug('missing "local" key for path map entry')
+                continue
+            remote = path_map.get("remote")
+            if not isinstance(remote, str):
+                debug('missing "remote" key for path map entry')
+                continue
+            result.append(PathMap(local, remote))
+        return result
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, PathMap):
+            return False
+        return self._local == other._local and self._remote == other._remote
+
+    def __hash__(self) -> int:
+        return hash(self.__slots__)
+
+    def map_from_local_to_remote(self, uri: str) -> tuple[str, bool]:
+        return _translate_path(uri, self._local, self._remote)
+
+    def map_from_remote_to_local(self, uri: str) -> tuple[str, bool]:
+        return _translate_path(uri, self._remote, self._local)
+
+
+class DefaultViewStatusHandler(ViewStatusHandler):
+
+    @override
+    def on_view_status_changed(self, config_name: str, view: sublime.View, status: str | None) -> None:
+        pass
+
+
+default_status_view_handler = DefaultViewStatusHandler()
+
+
+class ClientConfig:
+    """
+    Represents the configuration for a language server.
+
+    Holds all settings needed to start and communicate with a language server, including the command to launch it, the
+    file types it applies to, transport options, and LSP-level options such as initialization options and capability
+    overrides.
+
+    All root configuration keys from corresponding server configuration (for example the backing LSP-*.sublime-settings
+    file) are accessible through attribute access (`.foo`).
+    """
+
+    CONFIG_KEYS: Final[set[str]] = {
+        'auto_complete_selector',
+        'command',
+        'diagnostics_mode',
+        'disabled_capabilities',
+        'enabled',
+        'env',
+        'experimental_capabilities',
+        'file_watcher',
+        'initialization_options',
+        'markdown_language_map',
+        'priority_selector',
+        'semantic_tokens',
+        'selector',
+        'settings',
+        'tcp_port',
+    }
+    """All server configuration keys that we recognize and have handling for."""
+
+    def __init__(
+        self,
+        *,
+        name: str,
+        selector: str,
+        priority_selector: str | None = None,
+        schemes: list[str] | None = None,
+        command: list[str] | None = None,
+        tcp_port: int | None = None,
+        auto_complete_selector: str | None = None,
+        enabled: bool = True,
+        initialization_options: DottedDict | None = None,
+        settings: DottedDict | None = None,
+        env: dict[str, str] | None = None,
+        experimental_capabilities: dict[str, Any] | None = None,
+        disabled_capabilities: DottedDict | None = None,
+        file_watcher: FileWatcherConfig | None = None,
+        semantic_tokens: dict[str, str] | None = None,
+        diagnostics_mode: str = "all_files",
+        markdown_language_map: MarkdownLangMapJson | None = None,
+        path_maps: list[PathMap] | None = None,
+        settings_store: SettingsStore | None = None,
+        custom_config_keys: dict[str, Any] | None = None
+    ) -> None:
+        """
+        :param name: Unique identifier for this language server.
+        :param selector: Sublime Text scope selector that determines which views this server is active for (e.g.
+            `"source.python"`).
+        :param priority_selector: Selector used when multiple servers match the same view; the highest-scoring server
+            takes precedence. Falls back to `selector` when not provided.
+        :param schemes: URI schemes this client handles (e.g. `["file", "buffer"]`). Defaults to `["file"]`.
+        :param command: Command and arguments used to launch the language server process.
+        :param tcp_port: Port for TCP transport. `None` uses stdio. `0` picks a free port. Negative values cause LSP to
+            host a TCP server (the language server connects to LSP rather than the other way around); `-1` picks any
+            free port, and `-N` binds to port `N`.
+        :param auto_complete_selector: Scope selector that restricts when auto-complete suggestions are shown. `None`
+             means that the value from the Sublime Text setting of the same name is used.
+        :param enabled: Whether this server is enabled.
+        :param initialization_options: `initializationOptions` sent to the server during the LSP `initialize` handshake.
+        :param settings: Server-specific settings sent via `workspace/didChangeConfiguration` and for
+            `workspace/configuration` requests.
+        :param env: Additional environment variables for the server process. A list value for the special `"PATH"` key
+            is joined with `os.pathsep` and prepended to the existing `PATH`.
+        :param experimental_capabilities: Extra capabilities advertised to the server under
+            `capabilities.experimental`.
+        :param disabled_capabilities: Dotted-path map of capability paths to disable, even if the server advertises
+            them.
+        :param file_watcher: Configuration for LSP file-watching (glob patterns, etc.).
+        :param semantic_tokens: Mapping of semantic token types/modifiers to Sublime Text scopes for syntax
+            highlighting.
+        :param diagnostics_mode: When to show diagnostics. `"all_files"` (default) shows them for all views;
+            `"workspace"` filters out diagnostics for files not within the workspace folders.
+        :param markdown_language_map: Optional mapping of markdown language identifiers to aliases and Sublime Text
+            syntaxes, used for syntax-highlighting fenced code blocks in popups. Each key is a fenced-code-block
+            language tag. Each value is a two-element tuple: aliases and syntax paths or `scope:BASE_SCOPE`
+            selectors. Follows the format of mdpopups' `sublime_user_lang_map` setting. `None` (the default)
+            applies no extra mapping.
+        :param path_maps: List of :class:`PathMap` entries for translating paths between the local machine and a remote
+            server (e.g. inside a container).
+        :param settings_store: The `SettingsStore` instance holding resource path and `Settings` instance
+            for the plugin settings. Present only for `ClientConfig`s created through `from_sublime_settings()`.
+        :param custom_config_keys: The complete raw settings dictionary. Used as a fallback for attribute/key access for
+            settings not explicitly modelled above.
+        """
+        self.name = name
+        self.selector = selector
+        self.priority_selector = priority_selector or self.selector
+        if isinstance(schemes, list):
+            self.schemes: list[str] = schemes
+        else:
+            self.schemes = ["file"]
+        self.command = command or []
+        self.tcp_port = tcp_port
+        self.auto_complete_selector = auto_complete_selector
+        self._enabled = enabled
+        self.initialization_options = initialization_options or DottedDict()
+        self.settings = settings or DottedDict()
+        self.env = env or {}
+        self.experimental_capabilities = experimental_capabilities
+        self.disabled_capabilities = disabled_capabilities or DottedDict()
+        self.file_watcher = file_watcher or {}
+        self.path_maps = path_maps
+        self.semantic_tokens = semantic_tokens
+        self.diagnostics_mode = diagnostics_mode
+        # Transformed mapping that uses tuples instead of lists for mdpopups.
+        self.resolved_markdown_language_map: MarkdownLangMap | None = None
+        self.markdown_language_map = markdown_language_map  # use the setter to populate resolved_markdown_language_map
+        self._settings_store = settings_store
+        if isinstance(custom_config_keys, dict):
+            self._custom_config_keys = custom_config_keys
+            # Only retain server configuration keys that we don't have dedicated properties for.
+            for key in self.CONFIG_KEYS:
+                if key in self._custom_config_keys:
+                    del self._custom_config_keys[key]
+        else:
+            self._custom_config_keys = {}
+        self._view_status_handler = default_status_view_handler
+
+    def __getattr__(self, name: str, /) -> Any:
+        """Get property through attribute access (`.foo`) for properties that don't exist natively."""
+        if name in self._custom_config_keys:
+            return self._custom_config_keys[name]
+        raise AttributeError(name)
+
+    @property
+    def root_settings(self) -> dict[str, Any]:
+        """Provides access to server configuration keys that are not explicitly exposed on ClientConfig."""
+        return self._custom_config_keys
+
+    @property
+    @deprecated('Use initialization_options instead')
+    def init_options(self) -> DottedDict:
+        return self.initialization_options
+
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    @enabled.setter
+    def enabled(self, enabled: bool) -> None:
+        if enabled == self._enabled:
+            return
+        if self._settings_store:
+            settings_basename = os.path.basename(self._settings_store.settings_path)
+            self._settings_store.settings.set("enabled", enabled)
+            sublime.save_settings(settings_basename)
+        self._enabled = enabled
+
+    @property
+    def markdown_language_map(self) -> MarkdownLangMapJson | None:
+        return self._markdown_language_map
+
+    @markdown_language_map.setter
+    def markdown_language_map(self, lang_map: MarkdownLangMapJson | None) -> None:
+        self._markdown_language_map = lang_map
+        self.resolved_markdown_language_map = self._resolve_markdown_language_map(lang_map)
+        if lang_map is not None and self.resolved_markdown_language_map is None:
+            debug(f'Invalid markdown_language_map setting ignored:\n{lang_map}')
+
+    def _resolve_markdown_language_map(self, lang_map: MarkdownLangMapJson | None) -> MarkdownLangMap | None:
+        if lang_map is None:
+            return None
+        result: MarkdownLangMap = {}
+        for tag, mapping in lang_map.items():
+            if isinstance(mapping, list) and len(mapping) == 2:
+                aliases, syntaxes = mapping
+                result[tag] = (tuple(aliases), tuple(syntaxes))
+            else:
+                return None
+        return result
+
+    @classmethod
+    def from_sublime_settings(cls, name: str, settings_store: SettingsStore) -> ClientConfig:
+        """
+        Create a ClientConfig from a Sublime Text `Settings` object.
+
+        Plugin-defined defaults are read from a resource path to the plugin's `.sublime-settings` file) and user
+        overrides are layered on top from `Settings`.
+
+        :param name: Unique server name.
+        :param settings_store: The `SettingsStore` object for this client.
+        """
+        s = settings_store.settings
+        file = settings_store.settings_path
+        base = sublime.decode_value(sublime.load_resource(file))
+        settings = DottedDict(deepcopy(base.get("settings", {})))  # defined by the plugin author
+        settings.update(deepcopy(read_dict_setting(s, "settings", {})))  # overrides from the user
+        # "initialization_options" with backwards compatibility for "initializationOptions"
+        base_old_init_opts = deepcopy(base.get("initializationOptions", {}))
+        base_new_init_opts = deepcopy(base.get("initialization_options", {}))
+        resolved_old_init_opts = deepcopy(read_dict_setting(s, "initializationOptions", {}))
+        resolved_new_init_opts = deepcopy(read_dict_setting(s, "initialization_options", {}))
+        initialization_options = DottedDict(base_new_init_opts or base_old_init_opts)
+        if resolved_old_init_opts != base_old_init_opts:
+            debug(f'"initializationOptions" in config {name} is deprecated! Use "initialization_options" instead.')
+            initialization_options.update(resolved_old_init_opts)
+        if resolved_new_init_opts != base_new_init_opts:
+            initialization_options.update(resolved_new_init_opts)
+        file_watcher = cast("FileWatcherConfig", deepcopy(read_dict_setting(s, "file_watcher", {})))
+        semantic_tokens = deepcopy(read_dict_setting(s, "semantic_tokens", {}))
+        disabled_capabilities = deepcopy(s.get("disabled_capabilities"))
+        disabled_capabilities = DottedDict(disabled_capabilities if isinstance(disabled_capabilities, dict) else {})
+        return ClientConfig(
+            name=name,
+            selector=_read_selector(s),
+            priority_selector=_read_priority_selector(s),
+            schemes=deepcopy(s.get("schemes")),
+            command=deepcopy(read_list_setting(s, "command", [])),
+            tcp_port=deepcopy(s.get("tcp_port")),
+            auto_complete_selector=deepcopy(s.get("auto_complete_selector")),
+            # Default to True, because an LSP plugin is enabled iff it is enabled as a Sublime package.
+            enabled=bool(s.get("enabled", True)),
+            initialization_options=initialization_options,
+            settings=settings,
+            env=deepcopy(read_dict_setting(s, "env", {})),
+            experimental_capabilities=deepcopy(s.get("experimental_capabilities")),
+            disabled_capabilities=disabled_capabilities,
+            file_watcher=file_watcher,
+            semantic_tokens=semantic_tokens,
+            diagnostics_mode=str(s.get("diagnostics_mode", "all_files")),
+            markdown_language_map=deepcopy(s.get("markdown_language_map")),
+            path_maps=PathMap.parse(s.get("path_maps")),
+            settings_store=settings_store,
+            custom_config_keys=deepcopy(s.to_dict())
+        )
+
+    @classmethod
+    def from_dict(cls, name: str, d: dict[str, Any]) -> ClientConfig:
+        """
+        Create a ClientConfig from a plain dictionary.
+
+        :param name: Unique server name.
+        :param d: Dictionary of configuration values.
+        """
+        disabled_capabilities = deepcopy(d.get("disabled_capabilities"))
+        disabled_capabilities = DottedDict(disabled_capabilities if isinstance(disabled_capabilities, dict) else {})
+        schemes = deepcopy(d.get("schemes"))
+        if not isinstance(schemes, list):
+            schemes = ["file"]
+        return ClientConfig(
+            name=name,
+            selector=_read_selector(d),
+            priority_selector=_read_priority_selector(d),
+            schemes=deepcopy(schemes),
+            command=deepcopy(d.get("command", [])),
+            tcp_port=deepcopy(d.get("tcp_port")),
+            auto_complete_selector=deepcopy(d.get("auto_complete_selector")),
+            enabled=deepcopy(d.get("enabled", False)),
+            initialization_options=DottedDict(
+                deepcopy(d.get("initialization_options", d.get("initializationOptions")))),
+            settings=DottedDict(deepcopy(d.get("settings"))),
+            env=deepcopy(d.get("env", {})),
+            experimental_capabilities=deepcopy(d.get("experimental_capabilities")),
+            disabled_capabilities=disabled_capabilities,
+            file_watcher=deepcopy(d.get("file_watcher", {})),
+            semantic_tokens=deepcopy(d.get("semantic_tokens", {})),
+            diagnostics_mode=deepcopy(d.get("diagnostics_mode", "all_files")),
+            markdown_language_map=deepcopy(d.get("markdown_language_map")),
+            path_maps=PathMap.parse(d.get("path_maps")),
+            custom_config_keys=deepcopy(d)
+        )
+
+    @classmethod
+    def from_config(cls, src_config: ClientConfig, override: dict[str, Any]) -> ClientConfig:
+        """
+        Create a ClientConfig by applying overrides to an existing config.
+
+        Values present in `override` take precedence over those in `src_config`. Structured
+        values (`initialization_options`, `settings`) are deep-merged rather than replaced wholesale. The raw
+        `_custom_config_keys` dict is shallow-merged.
+
+        :param src_config: The base configuration to start from.
+        :param override: Dictionary of values to override.
+        """
+        disabled_capabilities = deepcopy(override.get("disabled_capabilities"))
+        disabled_capabilities = DottedDict(
+            disabled_capabilities
+            if isinstance(disabled_capabilities, dict)
+            else src_config.disabled_capabilities.copy())
+        return ClientConfig(
+            name=src_config.name,
+            selector=_read_selector(override) or src_config.selector,
+            priority_selector=_read_priority_selector(override) or src_config.priority_selector,
+            schemes=deepcopy(override.get("schemes", src_config.schemes)),
+            command=deepcopy(override.get("command", src_config.command)),
+            tcp_port=deepcopy(override.get("tcp_port", src_config.tcp_port)),
+            auto_complete_selector=deepcopy(override.get("auto_complete_selector", src_config.auto_complete_selector)),
+            enabled=deepcopy(override.get("enabled", src_config.enabled)),
+            initialization_options=DottedDict.from_base_and_override(
+                src_config.initialization_options,
+                override.get("initialization_options", override.get("initializationOptions"))),
+            settings=DottedDict.from_base_and_override(src_config.settings, override.get("settings")),
+            env=deepcopy(override.get("env", src_config.env)),
+            experimental_capabilities=deepcopy(
+                override.get("experimental_capabilities", src_config.experimental_capabilities)),
+            disabled_capabilities=disabled_capabilities,
+            file_watcher=deepcopy(override.get("file_watcher", src_config.file_watcher)),
+            semantic_tokens=deepcopy(override.get("semantic_tokens", src_config.semantic_tokens)),
+            diagnostics_mode=deepcopy(override.get("diagnostics_mode", src_config.diagnostics_mode)),
+            markdown_language_map=deepcopy(override.get("markdown_language_map", src_config.markdown_language_map)),
+            path_maps=PathMap.parse(override.get("path_maps")) or deepcopy(src_config.path_maps),
+            settings_store=src_config._settings_store,
+            custom_config_keys=deepcopy({**src_config._custom_config_keys, **override})
+        )
+
+    def create_transport_config(self) -> TransportConfig:
+        """
+        Build a :class:`TransportConfig` ready for starting the language server.
+
+        Expands variables in the command arguments and environment, resolves the TCP port (including binding a listener
+        socket when LSP is hosting the server), and returns the resulting transport configuration.
+
+        :param variables: Sublime Text variable substitution dict (e.g. from `window.extract_variables()`). A `"port"`
+            key is added automatically when a TCP port is in use.
+        """
+        if self.tcp_port is not None:
+            if self.tcp_port < 0:
+                return TcpServerTransportConfig(None if self.tcp_port == -1 else -self.tcp_port)
+            return TcpClientTransportConfig(None if self.tcp_port == 0 else self.tcp_port)
+        return StdioTransportConfig()
+
+    def set_view_status_handler(self, handler: ViewStatusHandler) -> None:
+        self._view_status_handler = handler
+
+    def set_view_status(self, view: sublime.View, message: str) -> None:
+        """
+        Update the view status bar entry for this server.
+
+        Shows `"<name> (<message>)"` when `message` is non-empty, or just `"<name>"` otherwise. Does nothing (and erases
+        any existing entry) when `show_view_status` is disabled in `LSP.sublime-settings`.
+
+        :param view: The view whose status bar should be updated.
+        :param message: A short status string (e.g. `"loading"`). Pass an empty string to show only the client name.
+        """
+        self._view_status_handler.on_view_status_changed(self.name, view, message)
+
+    def erase_view_status(self, view: sublime.View) -> None:
+        """
+        Remove this server's entry from the view's status bar.
+
+        :param view: The view whose status bar entry should be cleared.
+        """
+        self._view_status_handler.on_view_status_changed(self.name, view, None)
+
+    def match_view(
+        self, view: sublime.View, scheme: str, window: sublime.Window, workspace_folders: list[WorkspaceFolder]
+    ) -> bool:
+        """
+        Return `True` if this server should be active for the given view.
+
+        Delegates to the registered plugin's `is_applicable` method when one is available; otherwise checks that
+        `scheme` is in :attr:`schemes` and that the view's syntax scope matches :attr:`selector`.
+
+        :param view: The view to test.
+        :param scheme: The URI scheme of the view's resource (e.g. `"file"`).
+        """
+        from ..api import AbstractPlugin
+        from ..api import get_plugin
+        from ..api import IsApplicableContext
+        if plugin := get_plugin(self.name):
+            if issubclass(plugin, AbstractPlugin):
+                return plugin.is_applicable(view, self)
+            plugin_context = IsApplicableContext(self, view, workspace_folders)
+            return plugin.is_applicable_async(plugin_context)
+        if (syntax := view.syntax()) and (selector := self.selector.strip()):
+            return scheme in self.schemes and sublime.score_selector(syntax.scope, selector) > 0
+        return False
+
+    def map_client_path_to_server_uri(self, path: str) -> str:
+        """
+        Convert a local filesystem path to the URI the language server expects.
+
+        Applies any configured :attr:`path_maps` to translate the path (e.g. from a local path to a container path),
+        then converts the result to a `file://` URI.
+
+        :param path: Absolute local filesystem path.
+        :returns: URI suitable for sending to the language server.
+        """
+        if self.path_maps:
+            for path_map in self.path_maps:
+                path, mapped = path_map.map_from_local_to_remote(path)
+                if mapped:
+                    break
+        return filename_to_uri(path)
+
+    def map_server_uri_to_client_path(self, uri: DocumentUri) -> str:
+        """
+        Convert a URI from the language server to a local filesystem path.
+
+        Only `file://` and `res://` URIs are supported; other schemes raise :exc:`ValueError`. Applies any
+        configured :attr:`path_maps` in reverse to translate the server path back to the local path.
+
+        :param uri: URI received from the language server.
+        :returns: Absolute local filesystem path.
+        :raises ValueError: If the URI scheme is not `"file"` or `"res"`.
+        """
+        scheme, path = parse_uri(uri)
+        if scheme not in {"file", "res"}:
+            raise ValueError(f"{uri}: {scheme} URI scheme is unsupported")
+        if self.path_maps:
+            for path_map in self.path_maps:
+                path, mapped = path_map.map_from_remote_to_local(path)
+                if mapped:
+                    break
+        return path
+
+    def is_disabled_capability(self, capability_path: str) -> bool:
+        """
+        Return `True` if the given capability has been disabled in the config.
+
+        Walks :attr:`disabled_capabilities` along `capability_path` (a string such as `"hoverProvider"` or dotted string
+        like `textDocumentSync.didOpen`). A capability is considered disabled when the value at that path is `True`, or
+        an empty dict (leaf node with no sub-keys).
+
+        :param capability_path: Dotted capability path to check.
+        """
+        for value in self.disabled_capabilities.walk(capability_path):
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, dict):
+                if value:
+                    # If it's not empty we'll continue the walk
+                    continue
+                # This might be a leaf node
+                return True
+        return False
+
+    def filter_out_disabled_capabilities(self, capability_path: str, options: dict[str, Any]) -> dict[str, Any]:
+        return {
+            k: v for k, v in options.items() if not self.is_disabled_capability(f"{capability_path}.{k}")
+        }
+
+    def __repr__(self) -> str:
+        items: list[str] = []
+        for k, v in self.__dict__.items():
+            if not k.startswith("_"):
+                items.append(f"{k}={v!r}")
+        return "{}({})".format(self.__class__.__name__, ", ".join(items))
+
+    def __eq__(self, other: object) -> bool:
+        return (
+            isinstance(other, ClientConfig)
+            and self._custom_config_keys == other._custom_config_keys
+            # "settings" are not considered when checking for equality
+            and all(k == 'settings' or getattr(self, k) == getattr(other, k) for k in self.CONFIG_KEYS)
+        )
+
+    def __hash__(self) -> int:
+        return hash(self.__repr__())
+
+
+def _read_selector(config: sublime.Settings | dict[str, Any]) -> str:
+    selector = config.get("selector")
+    if isinstance(selector, str):
+        return selector
+    return ""
+
+
+def _read_priority_selector(config: sublime.Settings | dict[str, Any]) -> str:
+    selector = config.get("priority_selector")
+    if isinstance(selector, str):
+        return selector
+    return ""

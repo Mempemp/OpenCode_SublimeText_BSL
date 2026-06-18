@@ -1,0 +1,6 @@
+{
+  "sublime_exe": "C:/Program Files/Sublime Text/subl.exe",
+  "java_exe": "java",
+  "lsp_jar_dir": "tools/bsl-lsp",
+  "lsp_jar_glob": "bsl-language-server-*-exec.jar"
+}

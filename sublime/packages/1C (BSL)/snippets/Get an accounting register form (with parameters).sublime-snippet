@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[FormParameters = New Structure;
+FormParameters.Insert("$0", );
+Form = GetForm("AccountingRegister.${1:ChooseAnAccountingRegister}.${2:ChooseForm}", FormParameters);]]></content>
+	<tabTrigger>GetForm</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Get an accounting register form (with parameters)</description>
+</snippet>

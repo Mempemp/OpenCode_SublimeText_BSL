@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA[&${1:ChooseACompilationDirective}]]></content>
+	<tabTrigger>Directive</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Compilation directive</description>
+</snippet>

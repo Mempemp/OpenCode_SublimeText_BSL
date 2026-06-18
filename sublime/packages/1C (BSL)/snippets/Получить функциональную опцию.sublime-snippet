@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA[ПолучитьФункциональнуюОпцию("${1:ВыберитеФункциональнуюОпцию}")]]></content>
+	<tabTrigger>Функциональнаяопция</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Получить функциональную опцию</description>
+</snippet>

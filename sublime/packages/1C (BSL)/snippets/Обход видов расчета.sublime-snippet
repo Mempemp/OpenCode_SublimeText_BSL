@@ -1,0 +1,9 @@
+<snippet>
+	<content><![CDATA[Выборка = ПланыВидовРасчета.$1.Выбрать();
+Пока Выборка.Следующий() Цикл
+	$0
+КонецЦикла;]]></content>
+	<tabTrigger>ПланыВидовРасчетаВыбрать</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Обход видов расчета</description>
+</snippet>

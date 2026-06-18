@@ -1,0 +1,9 @@
+<snippet>
+	<content><![CDATA[Select = Catalogs.$1.Select();
+While Select.Next() Do
+	$0
+EndDo;]]></content>
+	<tabTrigger>CatalogsSelect</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Item traversal</description>
+</snippet>

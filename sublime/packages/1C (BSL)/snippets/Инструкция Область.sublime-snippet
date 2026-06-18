@@ -1,0 +1,7 @@
+<snippet>
+	<content><![CDATA[#Область $0
+#КонецОбласти]]></content>
+	<tabTrigger>Область</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Инструкция Область</description>
+</snippet>

@@ -1,0 +1,16 @@
+<snippet>
+	<content><![CDATA[// <Procedure description>
+//
+// Parameters:
+//  <Parameter1>  - <Type.Subtype> - <parameter description>
+//                  <parameter description continued>
+//  <Parameter2>  - <Type.Subtype> - <parameter description>
+//                  <parameter description continued>
+//
+Procedure ${1:ProcedureName}()
+	$0
+EndProcedure // ${1:ProcedureName}()]]></content>
+	<tabTrigger>Procedure</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Procedure (with header)</description>
+</snippet>

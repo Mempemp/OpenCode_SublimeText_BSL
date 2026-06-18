@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA[ОткрытьФорму("ПланВидовХарактеристик.${1:ВыберитеПвх}.${2:ВыберитеФорму}$0");]]></content>
+	<tabTrigger>ОткрытьФорму</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Открыть форму плана видов характеристик</description>
+</snippet>

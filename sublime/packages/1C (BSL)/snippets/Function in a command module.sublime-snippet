@@ -1,0 +1,21 @@
+<snippet>
+	<content><![CDATA[// <Function description>
+//
+//
+// Parameters:
+//  <Parameter1>  - <Type.Subtype> - <parameter description>
+//                 <parameter description continued>
+//  <Parameter2>  - <Type.Subtype> - <parameter description>
+//                 <parameter description continued>
+//
+// Returns:
+//   <Type.Subtype>   - <returned value description>
+//
+&${1:ChooseACompilationDirective}
+Function ${2:FunctionName}()
+	$0
+EndFunction // ${2:FunctionName}()]]></content>
+	<tabTrigger>Function</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Function in a command module</description>
+</snippet>

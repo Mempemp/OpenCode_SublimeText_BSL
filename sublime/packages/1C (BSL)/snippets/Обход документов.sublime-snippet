@@ -1,0 +1,9 @@
+<snippet>
+	<content><![CDATA[Выборка = Документы.$1.Выбрать();
+Пока Выборка.Следующий() Цикл
+	$0
+КонецЦикла;]]></content>
+	<tabTrigger>ДокументыВыбрать</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Обход документов</description>
+</snippet>

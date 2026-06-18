@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[FormParameters = New Structure;
+FormParameters.Insert("$0", );
+Form = GetForm("CommonForm.${1:ChooseACommonForm}");]]></content>
+	<tabTrigger>GetForm</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Get a common form (with parameters)</description>
+</snippet>

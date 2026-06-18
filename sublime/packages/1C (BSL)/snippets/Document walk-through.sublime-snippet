@@ -1,0 +1,9 @@
+<snippet>
+	<content><![CDATA[Select = Documents.$1.Select();
+While Selection.Next() Do
+	$0
+EndDo;]]></content>
+	<tabTrigger>DocumentsSelect</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Document walk-through</description>
+</snippet>

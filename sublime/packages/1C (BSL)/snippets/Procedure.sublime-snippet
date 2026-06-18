@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[Procedure ${1:ProcedureName}()
+	$0
+EndProcedure]]></content>
+	<tabTrigger>Procedure</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Procedure</description>
+</snippet>

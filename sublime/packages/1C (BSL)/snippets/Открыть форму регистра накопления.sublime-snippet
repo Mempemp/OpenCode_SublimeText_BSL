@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA[ОткрытьФорму("РегистрНакопления.${1:ВыберитеРегистрНакопления}.${2:ВыберитеФорму}$0");]]></content>
+	<tabTrigger>ОткрытьФорму</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Открыть форму регистра накопления</description>
+</snippet>

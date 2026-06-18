@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA[OpenForm("ChartOfCharacteristicTypes.${1:ChooseAChartOfCharateristicTypes}.${2:ChooseForm}$0");]]></content>
+	<tabTrigger>OpenForm</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Open a chart of characteristic types form</description>
+</snippet>

@@ -1,0 +1,12 @@
+<snippet>
+	<content><![CDATA[Query = New Query;
+Query.Text = "$1";
+Result = Query.Execute();
+Selection = Result.Choose();
+While Selection.Next() Do
+  $0
+EndDo;]]></content>
+	<tabTrigger>Query</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Query</description>
+</snippet>

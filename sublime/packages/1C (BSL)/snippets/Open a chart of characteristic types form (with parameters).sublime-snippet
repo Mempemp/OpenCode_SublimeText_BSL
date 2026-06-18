@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[FormParameters = New Structure;
+FormParameters.Insert("$0", );
+OpenForm("ChartOfCharacteristicTypes.${1:ChooseAChartOfCharacteristicTypes}.${2:ChooseForm}", FormParameters);]]></content>
+	<tabTrigger>OpenForm</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Open a chart of characteristic types form (with parameters)</description>
+</snippet>

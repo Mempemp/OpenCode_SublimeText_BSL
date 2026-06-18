@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA[PredefinedValue("Enum.${1:ChooseAnEnumerationValue}")]]></content>
+	<tabTrigger>Enums</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Enumeration</description>
+</snippet>

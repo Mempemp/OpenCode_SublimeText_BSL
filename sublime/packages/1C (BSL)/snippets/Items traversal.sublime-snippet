@@ -1,0 +1,9 @@
+<snippet>
+	<content><![CDATA[Selection = ExchangePlans.$1.Choose();
+While Selection.Next() Do
+	$0
+EndDo;]]></content>
+	<tabTrigger>ExchangePlansChoose</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Items traversal</description>
+</snippet>

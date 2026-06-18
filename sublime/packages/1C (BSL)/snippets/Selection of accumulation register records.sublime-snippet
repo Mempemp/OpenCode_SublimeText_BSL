@@ -1,0 +1,9 @@
+<snippet>
+	<content><![CDATA[Selection = AccumulationRegister.${1:ChooseAnAccumulationRegister}.Choose();
+While Selection.Next() Do
+	$0
+EndDo;]]></content>
+	<tabTrigger>AccumulationRegisterChoose</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Selection of accumulation register records</description>
+</snippet>

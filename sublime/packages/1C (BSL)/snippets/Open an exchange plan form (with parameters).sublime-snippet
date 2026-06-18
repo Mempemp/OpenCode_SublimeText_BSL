@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[FormParameters = New Structure;
+FormParameters.Insert("$0", );
+OpenForm("ExchangePlan.${1:ChooseAnExchangePlan}.${2:ChooseForm}", FormParameters);]]></content>
+	<tabTrigger>OpenForm</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Open an exchange plan form (with parameters)</description>
+</snippet>

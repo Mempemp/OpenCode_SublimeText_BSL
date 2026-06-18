@@ -1,0 +1,9 @@
+<snippet>
+	<content><![CDATA[Select = Catalogs.$1.SelectHierarchicaly();
+While Select.Next() Do
+	$0
+EndDo;]]></content>
+	<tabTrigger>CatalogsSelectHierarchicaly</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Items hierarchical traversal</description>
+</snippet>

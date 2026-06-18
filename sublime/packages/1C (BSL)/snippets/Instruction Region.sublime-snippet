@@ -1,0 +1,7 @@
+<snippet>
+	<content><![CDATA[#Region $0
+#EndRegion]]></content>
+	<tabTrigger>Region</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Instruction Region</description>
+</snippet>

@@ -1,0 +1,10 @@
+<snippet>
+	<content><![CDATA[Сообщение = Новый СообщениеПользователю;
+Сообщение.Текст = "$0";
+Сообщение.Поле = "";
+Сообщение.УстановитьДанные();
+Сообщение.Сообщить();]]></content>
+	<tabTrigger>Сообщение</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Сообщение</description>
+</snippet>

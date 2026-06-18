@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[Для ${1:Счетчик} По ${2:Ограничение} Цикл
+	$0
+КонецЦикла;]]></content>
+	<tabTrigger>Для</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Для</description>
+</snippet>

@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[FormParameters = New Structure;
+FormParameters.Insert("$0", );
+Form = GetForm("ChartOfAccounts.${1:ChooseAChartOfAccounts}.${2:ChooseForm}", FormParameters);]]></content>
+	<tabTrigger>GetForm</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Get a chart of accounts form (with parameters)</description>
+</snippet>

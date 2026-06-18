@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA[RegisterRecords.${1:ChooseARegister}]]></content>
+	<tabTrigger>RegisterRecords</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>RegisterRecords</description>
+</snippet>

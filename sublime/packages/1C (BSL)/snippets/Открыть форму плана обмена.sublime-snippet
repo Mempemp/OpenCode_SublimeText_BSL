@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA[ОткрытьФорму("ПланОбмена.${1:ВыберитеПланОбмена}.${2:ВыберитеФорму}");]]></content>
+	<tabTrigger>ОткрытьФорму</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Открыть форму плана обмена</description>
+</snippet>

@@ -1,0 +1,9 @@
+<snippet>
+	<content><![CDATA[Выборка = Справочники.$1.ВыбратьИерархически();
+Пока Выборка.Следующий() Цикл
+	$0
+КонецЦикла;]]></content>
+	<tabTrigger>СправочникиВыбратьИерархически</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Обход элементов иерархически</description>
+</snippet>

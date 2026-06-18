@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[#If ${1:ChooseAPreprocessorInstruction} Then
+	$0
+#EndIf]]></content>
+	<tabTrigger>Instrution</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Instruction If</description>
+</snippet>

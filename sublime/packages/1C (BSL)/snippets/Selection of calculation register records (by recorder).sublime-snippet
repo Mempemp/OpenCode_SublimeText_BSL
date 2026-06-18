@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[Selection = CalculationRegister.${1:ChooseACalculationRegister}.SelectByRecorder($0);
+While Selection.Next() Do
+EndDo;]]></content>
+	<tabTrigger>CalculationRegisterSelectByRecorder</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Selection of calculation register records (by recorder)</description>
+</snippet>

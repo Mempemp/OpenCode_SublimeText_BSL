@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA[ПолучитьФорму("ОбщаяФорма.${1:ВыберитеОбщуюФорму}");]]></content>
+	<tabTrigger>ПолучитьФорму</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Получить общую форму</description>
+</snippet>

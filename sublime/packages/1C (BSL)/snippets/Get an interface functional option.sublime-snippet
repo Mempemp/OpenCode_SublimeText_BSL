@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA[GetInterfaceFunctionalOption("${1:ChooseAFunctionalOption}")]]></content>
+	<tabTrigger>Functionaloption</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Get an interface functional option</description>
+</snippet>

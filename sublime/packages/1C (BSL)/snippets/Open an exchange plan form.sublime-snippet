@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA[OpenForm("ExchangePlan.${1:ChooseAnExchangePlan}.${2:ChooseForm}");]]></content>
+	<tabTrigger>OpenForm</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Open an exchange plan form</description>
+</snippet>

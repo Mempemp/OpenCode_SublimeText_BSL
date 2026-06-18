@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[#Если ${1:ВыберитеИнструкциюПрепроцессора} Тогда
+	$0
+#КонецЕсли]]></content>
+	<tabTrigger>Инструкция</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Инструкция Если</description>
+</snippet>

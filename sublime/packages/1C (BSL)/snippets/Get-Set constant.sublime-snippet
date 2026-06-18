@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA[Constants.$1.${2:SelectVariant}()]]></content>
+	<tabTrigger>Constants</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Get/Set constant</description>
+</snippet>

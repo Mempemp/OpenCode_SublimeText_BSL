@@ -1,0 +1,9 @@
+<snippet>
+	<content><![CDATA[Selection = ChartOfAccounts.$1.Choose();
+While Selection.Next() Do
+	$0
+EndDo;]]></content>
+	<tabTrigger>ChartOfAccountsChoose</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Charts of characteristic types traversal</description>
+</snippet>

@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[FormParameters = New Structure;
+FormParameters.Insert("$0", );
+OpenForm("Task.${1:ChooseATask}.${2:ChooseForm}", FormParameters);]]></content>
+	<tabTrigger>OpenForm</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Open a task form (with parameters)</description>
+</snippet>

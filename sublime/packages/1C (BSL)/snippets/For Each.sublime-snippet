@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[For Each ${1:Variable} In ${2:Collection} Do
+	$0
+EndDo;]]></content>
+	<tabTrigger>ForEach</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>For Each</description>
+</snippet>

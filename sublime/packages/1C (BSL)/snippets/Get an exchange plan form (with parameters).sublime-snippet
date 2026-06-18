@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[FormParameters = New Structure;
+FormParameters.Insert("$0", );
+Form = GetForm("ExchangePlan.${1:ChooseAnExchangePlan}.${2:ChooseForm}", FormParameters);]]></content>
+	<tabTrigger>GetForm</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Get an exchange plan form (with parameters)</description>
+</snippet>

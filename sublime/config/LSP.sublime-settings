@@ -1,0 +1,9 @@
+{
+  "clients": {
+    "bsl": {
+      "enabled": true,
+      "command": ["java", "-jar", "__BSL_LSP_JAR__"],
+      "selector": "source.bsl"
+    }
+  }
+}

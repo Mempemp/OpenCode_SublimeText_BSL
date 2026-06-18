@@ -1,0 +1,9 @@
+<snippet>
+	<content><![CDATA[Выборка = РегистрНакопления.${1:ВыберитеРегистрНакопления}.Выбрать();
+Пока Выборка.Следующий() Цикл
+	$0
+КонецЦикла;]]></content>
+	<tabTrigger>РегистрНакопленияВыбрать</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Выборка записей регистра накопления</description>
+</snippet>

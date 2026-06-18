@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA[&${1:ВыберитеДирективуКомпиляции}]]></content>
+	<tabTrigger>Директива</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Директива компиляции</description>
+</snippet>

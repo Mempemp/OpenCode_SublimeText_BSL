@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[Пока ${1:Условие} Цикл
+	$0
+КонецЦикла;]]></content>
+	<tabTrigger>Пока</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Пока</description>
+</snippet>

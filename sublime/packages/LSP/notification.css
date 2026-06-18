@@ -1,0 +1,19 @@
+.notification {
+    margin: 0.5rem;
+    padding: 1rem;
+}
+
+.notification h2 {
+    margin-bottom: 1rem;
+}
+
+.notification .actions {
+    margin-top: 2rem;
+}
+
+.notification .actions a {
+    border: 2px solid color(var(--foreground) alpha(0.25));
+    color: var(--foreground);
+    padding: 0.5rem;
+    text-decoration: none;
+}

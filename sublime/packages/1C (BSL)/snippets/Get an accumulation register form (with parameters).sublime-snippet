@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[FormParameters = New Structure;
+FormParameters.Insert("$0", );
+Form = GetForm("AccumulationRegister.${1:ChooseAnAccumulationRegister}.${2:ChooseForm}", FormParameters);]]></content>
+	<tabTrigger>GetForm</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Get an accumulation register form (with parameters)</description>
+</snippet>

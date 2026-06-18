@@ -1,0 +1,9 @@
+<snippet>
+	<content><![CDATA[Selection = AccountingRegister.${1:ChooseAnAccountingRegister}.Choose();
+While Selection.Next() Do
+	$0
+EndDo;]]></content>
+	<tabTrigger>AccountingRegisterChoose</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Selection of accounting register records</description>
+</snippet>

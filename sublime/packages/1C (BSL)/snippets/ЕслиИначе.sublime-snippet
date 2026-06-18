@@ -1,0 +1,9 @@
+<snippet>
+	<content><![CDATA[Если ${1:Условие} Тогда
+	$0
+Иначе
+КонецЕсли;]]></content>
+	<tabTrigger>Если</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>ЕслиИначе</description>
+</snippet>

@@ -1,0 +1,10 @@
+<snippet>
+	<content><![CDATA[Message = New UserMessage;
+Message.Text = "$0";
+Message.Field = "";
+Message.SetData();
+Message.Message();]]></content>
+	<tabTrigger>Message</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Message</description>
+</snippet>

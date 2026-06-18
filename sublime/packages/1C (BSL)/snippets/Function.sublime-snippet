@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[Function ${1:FunctionName}()
+	$0
+EndFunction // ${1:FunctionName}()]]></content>
+	<tabTrigger>Function</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Function</description>
+</snippet>

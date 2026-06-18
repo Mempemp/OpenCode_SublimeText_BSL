@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[ПараметрыФормы = Новый Структура;
+ПараметрыФормы.Вставить("$0", );
+Форма = ПолучитьФорму("ОбщаяФорма.${1:ВыберитеОбщуюФорму}");]]></content>
+	<tabTrigger>ПолучитьФорму</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Получить общую форму (с параметрами)</description>
+</snippet>

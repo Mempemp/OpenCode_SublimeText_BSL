@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA[Вопрос("${1:ТекстВопроса}", ${2:РежимДиалогаВопрос})]]></content>
+	<tabTrigger>Вопрос</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Вопрос</description>
+</snippet>

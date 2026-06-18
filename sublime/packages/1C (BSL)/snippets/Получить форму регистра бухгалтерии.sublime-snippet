@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA[ПолучитьФорму("РегистрБухгалтерии.${1:ВыберитеРегистрБухгалтерии}.${2:ВыберитеФорму}$0");]]></content>
+	<tabTrigger>ПолучитьФорму</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Получить форму регистра бухгалтерии</description>
+</snippet>

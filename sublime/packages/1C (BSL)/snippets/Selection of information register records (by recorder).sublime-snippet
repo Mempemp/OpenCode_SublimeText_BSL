@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[Selection = InformationRegister.${1:ChooseAnInformationRegister}.SelectByRecorder($0);
+While Selection.Next() Do
+EndDo;]]></content>
+	<tabTrigger>InformationRegisterSelectByRecorder</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Selection of information register records (by recorder)</description>
+</snippet>

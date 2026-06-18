@@ -1,0 +1,9 @@
+<snippet>
+	<content><![CDATA[Выборка = БизнесПроцессы.$1.Выбрать();
+Пока Выборка.Следующий() Цикл
+	$0
+КонецЦикла;]]></content>
+	<tabTrigger>БизнесПроцессыВыбрать</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Обход бизнес-процессов</description>
+</snippet>

@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA[Движения.${1:ВыборРегистра}]]></content>
+	<tabTrigger>Движения</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Движения</description>
+</snippet>

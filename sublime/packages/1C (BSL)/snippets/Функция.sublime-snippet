@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[Функция ${1:ИмяФункции}()
+	$0
+КонецФункции // ${1:ИмяФункции}()]]></content>
+	<tabTrigger>Функция</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Функция</description>
+</snippet>

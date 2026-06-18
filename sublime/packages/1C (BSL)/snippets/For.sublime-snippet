@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[For ${1:Counter} To ${2:Limit} Do
+	$0
+EndDo;]]></content>
+	<tabTrigger>For</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>For</description>
+</snippet>

@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA[OpenForm("CalculationRegister.${1:ChooseACalculationRegister}.${2:ChooseForm}$0");]]></content>
+	<tabTrigger>OpenForm</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Open a calculation register form</description>
+</snippet>

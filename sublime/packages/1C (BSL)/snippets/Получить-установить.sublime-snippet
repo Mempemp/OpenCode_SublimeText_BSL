@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA[Константы.$1.${2:ВыборМетода}()]]></content>
+	<tabTrigger>Константы</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Получить/установить</description>
+</snippet>

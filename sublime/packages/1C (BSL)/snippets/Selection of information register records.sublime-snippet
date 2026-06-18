@@ -1,0 +1,9 @@
+<snippet>
+	<content><![CDATA[Selection = InformationRegister.${1:ChooseAnInformationRegister}.Choose();
+While Selection.Next() Do
+	$0
+EndDo;]]></content>
+	<tabTrigger>InformationRegisterChoose</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Selection of information register records</description>
+</snippet>

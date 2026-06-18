@@ -1,0 +1,9 @@
+<snippet>
+	<content><![CDATA[Попытка
+	$0
+Исключение
+КонецПопытки;]]></content>
+	<tabTrigger>Попытка</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Попытка</description>
+</snippet>

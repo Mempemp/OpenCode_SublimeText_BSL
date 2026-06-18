@@ -1,0 +1,9 @@
+<snippet>
+	<content><![CDATA[Выборка = ПланыВидовХарактеристик.$1.Выбрать();
+Пока Выборка.Следующий() Цикл
+	$0
+КонецЦикла;]]></content>
+	<tabTrigger>ПланыВидовХарактеристикВыбрать</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Обход видов характеристик</description>
+</snippet>

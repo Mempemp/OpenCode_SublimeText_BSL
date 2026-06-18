@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA[ПолучитьФорму("Справочник.${1:ВыберитеСправочник}.${2:ВыберитеФорму}$0");]]></content>
+	<tabTrigger>ПолучитьФорму</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Получить форму справочника</description>
+</snippet>

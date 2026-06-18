@@ -1,0 +1,11 @@
+{
+    "*": {
+        ">=4096": [
+            "bracex",
+            "mdpopups",
+            "orjson",
+            "typing_extensions",
+            "wcmatch"
+        ]
+    }
+}

@@ -1,0 +1,17 @@
+<snippet>
+	<content><![CDATA[// <Procedure description>
+//
+// Parameters:
+//  <Parameter1>  - <Type.Subtype> - <parameter description>
+//                  <parameter description continued>
+//  <Parameter2>  - <Type.Subtype> - <parameter description>
+//                  <parameter description continued>
+//
+&${1:ChooseACompilationDirective}
+Procedure ${2:ProcedureName}()
+	$0
+EndProcedure // ${2:ProcedureName}()]]></content>
+	<tabTrigger>Procedure</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Procedure in a form module</description>
+</snippet>

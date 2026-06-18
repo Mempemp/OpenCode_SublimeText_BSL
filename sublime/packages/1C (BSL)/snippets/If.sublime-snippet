@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[If ${1:Condition} Then
+	$0
+EndIf;]]></content>
+	<tabTrigger>If</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>If</description>
+</snippet>

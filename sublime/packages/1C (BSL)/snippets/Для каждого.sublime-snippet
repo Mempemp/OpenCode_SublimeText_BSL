@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[Для каждого ${1:Переменная} Из ${2:Коллекция} Цикл
+	$0
+КонецЦикла;]]></content>
+	<tabTrigger>ДляКаждого</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Для каждого</description>
+</snippet>

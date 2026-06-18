@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[While ${1:Condition} Do
+	$0
+EndDo;]]></content>
+	<tabTrigger>While</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>While</description>
+</snippet>

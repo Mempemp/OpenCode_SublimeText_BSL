@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA["$1"]]></content>
+	<tabTrigger>null</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Форматная строка</description>
+</snippet>

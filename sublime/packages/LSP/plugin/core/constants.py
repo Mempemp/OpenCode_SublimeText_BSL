@@ -1,0 +1,374 @@
+from __future__ import annotations
+
+from ...protocol import CodeActionKind
+from ...protocol import CompletionItemKind
+from ...protocol import DiagnosticSeverity
+from ...protocol import DiagnosticTag
+from ...protocol import DocumentHighlightKind
+from ...protocol import LanguageKind
+from ...protocol import MessageType
+from ...protocol import SymbolKind
+from .typing import StrEnum
+from enum import auto
+from enum import IntEnum
+from enum import IntFlag
+from os.path import dirname
+from os.path import join
+from typing import Dict
+from typing import Tuple
+import sublime
+
+try:
+    from mdpopups.marko import __version__ as marko_version  # pyright: ignore[reportMissingImports]
+except ImportError:
+    marko_version = None
+
+
+MarkdownLangMap = Dict[str, Tuple[Tuple[str, ...], Tuple[str, ...]]]
+SublimeKind = Tuple[int, str, str]
+
+
+ST_CACHE_PATH = sublime.cache_path()
+ST_INSTALLED_PACKAGES_PATH = sublime.installed_packages_path()
+ST_PACKAGES_PATH = sublime.packages_path()
+ST_PLATFORM = sublime.platform()
+ST_VERSION = int(sublime.version())
+# TODO: Convert to `Path` once `AbstractPlugin` is removed.
+ST_STORAGE_PATH = join(dirname(ST_CACHE_PATH), "Package Storage")
+"""
+The "Package Storage" is a way to store server data without influencing the
+behavior of Sublime Text's "catalog". Its path is '$DATA/Package Storage',
+where $DATA means:
+
+- on macOS: ~/Library/Application Support/Sublime Text
+- on Windows: %LocalAppData%/Sublime Text
+- on Linux: ~/.cache/sublime-text
+"""
+MARKO_MD_PARSER_VERSION: str | None = marko_version
+# Brackets that are commonly auto-paired by ST.
+AUTO_CLOSE_BRACKETS = ('{}', '()', '[]')
+
+
+class RequestFlags(IntFlag):
+    """
+    A bitflag that holds information about selecting a subset of request types.
+
+    This is used for example to prioritize certain requests between different sessions in a multi-session configuration,
+    and to mark some requests as pending for refresh in a given document.
+    """
+
+    NONE = 0
+    DOCUMENT_COLOR = 1
+    """ textDocument/documentColor """
+    INLAY_HINT = 2
+    """ textDocument/inlayHint """
+    SEMANTIC_TOKENS = 4
+    """ textDocument/semanticTokens """
+    ON_TYPE_FORMATTING = 8
+    """ textDocument/onTypeFormatting """
+    CODE_LENS = 16
+    """ textDocument/codeLens """
+    DIAGNOSTIC = 32
+    """ textDocument/diagnostic """
+
+
+class RegionKey(StrEnum):
+    """Key names for use with the `View.add_regions` method."""
+
+    CODE_ACTION = 'lsp_code_action'
+    DOCUMENT_LINK = 'lsp_document_link'
+    HOVER_HIGHLIGHT = 'lsp_hover_highlight'
+    REFERENCE_HIGHLIGHT = 'lsp_reference_highlight'
+
+
+class ChangeEventAction(IntEnum):
+    CUT = auto()
+    INSERT_NEWLINE = auto()
+    OTHER = auto()
+    PASTE = auto()
+    REDO = auto()
+    TYPE = auto()
+    UNDO = auto()
+
+
+# Setting keys
+CODE_LENS_ENABLED_KEY = 'lsp_show_code_lens'
+HOVER_ENABLED_KEY = 'lsp_show_hover_popups'
+SHOW_DEFINITIONS_KEY = 'show_definitions'
+
+# Region flags
+DIAGNOSTIC_ICON_FLAGS = sublime.RegionFlags.HIDE_ON_MINIMAP | sublime.RegionFlags.DRAW_NO_FILL | sublime.RegionFlags.DRAW_NO_OUTLINE | sublime.RegionFlags.NO_UNDO  # noqa: E501
+DOCUMENT_LINK_FLAGS = sublime.RegionFlags.HIDE_ON_MINIMAP | sublime.RegionFlags.DRAW_NO_FILL | sublime.RegionFlags.DRAW_NO_OUTLINE | sublime.RegionFlags.DRAW_SOLID_UNDERLINE | sublime.RegionFlags.NO_UNDO  # noqa: E501
+REGIONS_INITIALIZE_FLAGS = sublime.RegionFlags.HIDDEN | sublime.RegionFlags.NO_UNDO
+SEMANTIC_TOKEN_FLAGS = sublime.RegionFlags.DRAW_NO_OUTLINE | sublime.RegionFlags.NO_UNDO
+
+# sublime.Kind tuples for sublime.CompletionItem, sublime.QuickPanelItem, sublime.ListInputItem
+# https://www.sublimetext.com/docs/api_reference.html#sublime.Kind
+KIND_ARRAY = (sublime.KindId.TYPE, "a", "Array")
+KIND_BOOLEAN = (sublime.KindId.VARIABLE, "b", "Boolean")
+KIND_CLASS = (sublime.KindId.TYPE, "c", "Class")
+KIND_COLOR = (sublime.KindId.MARKUP, "c", "Color")
+KIND_CONSTANT = (sublime.KindId.VARIABLE, "c", "Constant")
+KIND_CONSTRUCTOR = (sublime.KindId.FUNCTION, "c", "Constructor")
+KIND_ENUM = (sublime.KindId.TYPE, "e", "Enum")
+KIND_ENUMMEMBER = (sublime.KindId.VARIABLE, "e", "Enum Member")
+KIND_EVENT = (sublime.KindId.FUNCTION, "e", "Event")
+KIND_FIELD = (sublime.KindId.VARIABLE, "f", "Field")
+KIND_FILE = (sublime.KindId.NAVIGATION, "f", "File")
+KIND_FOLDER = (sublime.KindId.NAVIGATION, "f", "Folder")
+KIND_FUNCTION = (sublime.KindId.FUNCTION, "f", "Function")
+KIND_INTERFACE = (sublime.KindId.TYPE, "i", "Interface")
+KIND_KEY = (sublime.KindId.NAVIGATION, "k", "Key")
+KIND_KEYWORD = (sublime.KindId.KEYWORD, "k", "Keyword")
+KIND_METHOD = (sublime.KindId.FUNCTION, "m", "Method")
+KIND_MODULE = (sublime.KindId.NAMESPACE, "m", "Module")
+KIND_NAMESPACE = (sublime.KindId.NAMESPACE, "n", "Namespace")
+KIND_NULL = (sublime.KindId.VARIABLE, "n", "Null")
+KIND_NUMBER = (sublime.KindId.VARIABLE, "n", "Number")
+KIND_OBJECT = (sublime.KindId.TYPE, "o", "Object")
+KIND_OPERATOR = (sublime.KindId.KEYWORD, "o", "Operator")
+KIND_PACKAGE = (sublime.KindId.NAMESPACE, "p", "Package")
+KIND_PROPERTY = (sublime.KindId.VARIABLE, "p", "Property")
+KIND_REFERENCE = (sublime.KindId.NAVIGATION, "r", "Reference")
+KIND_SNIPPET = (sublime.KindId.SNIPPET, "s", "Snippet")
+KIND_STRING = (sublime.KindId.VARIABLE, "s", "String")
+KIND_STRUCT = (sublime.KindId.TYPE, "s", "Struct")
+KIND_TEXT = (sublime.KindId.MARKUP, "t", "Text")
+KIND_TYPEPARAMETER = (sublime.KindId.TYPE, "t", "Type Parameter")
+KIND_UNIT = (sublime.KindId.VARIABLE, "u", "Unit")
+KIND_VALUE = (sublime.KindId.VARIABLE, "v", "Value")
+KIND_VARIABLE = (sublime.KindId.VARIABLE, "v", "Variable")
+
+KIND_ERROR = (sublime.KindId.COLOR_REDISH, "e", "Error")
+KIND_WARNING = (sublime.KindId.COLOR_YELLOWISH, "w", "Warning")
+KIND_INFORMATION = (sublime.KindId.COLOR_BLUISH, "i", "Information")
+KIND_HINT = (sublime.KindId.COLOR_BLUISH, "h", "Hint")
+
+KIND_QUICKFIX = (sublime.KindId.COLOR_YELLOWISH, "f", "QuickFix")
+KIND_REFACTOR = (sublime.KindId.COLOR_CYANISH, "r", "Refactor")
+KIND_SOURCE = (sublime.KindId.COLOR_PURPLISH, "s", "Source")
+
+COMPLETION_KINDS: dict[CompletionItemKind, SublimeKind] = {
+    CompletionItemKind.Text: KIND_TEXT,
+    CompletionItemKind.Method: KIND_METHOD,
+    CompletionItemKind.Function: KIND_FUNCTION,
+    CompletionItemKind.Constructor: KIND_CONSTRUCTOR,
+    CompletionItemKind.Field: KIND_FIELD,
+    CompletionItemKind.Variable: KIND_VARIABLE,
+    CompletionItemKind.Class: KIND_CLASS,
+    CompletionItemKind.Interface: KIND_INTERFACE,
+    CompletionItemKind.Module: KIND_MODULE,
+    CompletionItemKind.Property: KIND_PROPERTY,
+    CompletionItemKind.Unit: KIND_UNIT,
+    CompletionItemKind.Value: KIND_VALUE,
+    CompletionItemKind.Enum: KIND_ENUM,
+    CompletionItemKind.Keyword: KIND_KEYWORD,
+    CompletionItemKind.Snippet: KIND_SNIPPET,
+    CompletionItemKind.Color: KIND_COLOR,
+    CompletionItemKind.File: KIND_FILE,
+    CompletionItemKind.Reference: KIND_REFERENCE,
+    CompletionItemKind.Folder: KIND_FOLDER,
+    CompletionItemKind.EnumMember: KIND_ENUMMEMBER,
+    CompletionItemKind.Constant: KIND_CONSTANT,
+    CompletionItemKind.Struct: KIND_STRUCT,
+    CompletionItemKind.Event: KIND_EVENT,
+    CompletionItemKind.Operator: KIND_OPERATOR,
+    CompletionItemKind.TypeParameter: KIND_TYPEPARAMETER
+}
+
+SYMBOL_KINDS: dict[SymbolKind, SublimeKind] = {
+    SymbolKind.File: KIND_FILE,
+    SymbolKind.Module: KIND_MODULE,
+    SymbolKind.Namespace: KIND_NAMESPACE,
+    SymbolKind.Package: KIND_PACKAGE,
+    SymbolKind.Class: KIND_CLASS,
+    SymbolKind.Method: KIND_METHOD,
+    SymbolKind.Property: KIND_PROPERTY,
+    SymbolKind.Field: KIND_FIELD,
+    SymbolKind.Constructor: KIND_CONSTRUCTOR,
+    SymbolKind.Enum: KIND_ENUM,
+    SymbolKind.Interface: KIND_INTERFACE,
+    SymbolKind.Function: KIND_FUNCTION,
+    SymbolKind.Variable: KIND_VARIABLE,
+    SymbolKind.Constant: KIND_CONSTANT,
+    SymbolKind.String: KIND_STRING,
+    SymbolKind.Number: KIND_NUMBER,
+    SymbolKind.Boolean: KIND_BOOLEAN,
+    SymbolKind.Array: KIND_ARRAY,
+    SymbolKind.Object: KIND_OBJECT,
+    SymbolKind.Key: KIND_KEY,
+    SymbolKind.Null: KIND_NULL,
+    SymbolKind.EnumMember: KIND_ENUMMEMBER,
+    SymbolKind.Struct: KIND_STRUCT,
+    SymbolKind.Event: KIND_EVENT,
+    SymbolKind.Operator: KIND_OPERATOR,
+    SymbolKind.TypeParameter: KIND_TYPEPARAMETER
+}
+
+DIAGNOSTIC_KINDS: dict[DiagnosticSeverity, SublimeKind] = {
+    DiagnosticSeverity.Error: KIND_ERROR,
+    DiagnosticSeverity.Warning: KIND_WARNING,
+    DiagnosticSeverity.Information: KIND_INFORMATION,
+    DiagnosticSeverity.Hint: KIND_HINT
+}
+
+CODE_ACTION_KINDS: dict[CodeActionKind, SublimeKind] = {
+    CodeActionKind.QuickFix: KIND_QUICKFIX,
+    CodeActionKind.Refactor: KIND_REFACTOR,
+    CodeActionKind.Source: KIND_SOURCE
+}
+
+MESSAGE_TYPE_LEVELS: dict[MessageType, str] = {
+    MessageType.Error: "ERROR",
+    MessageType.Warning: "WARNING",
+    MessageType.Info: "INFO",
+    MessageType.Log: "LOG",
+    MessageType.Debug: "DEBUG"
+}
+
+
+# Symbol scope to kind mapping, based on https://github.com/sublimetext-io/docs.sublimetext.io/issues/30
+SUBLIME_KIND_SCOPES: dict[SublimeKind, str] = {
+    sublime.KIND_KEYWORD: "keyword | storage.modifier | storage.type | keyword.declaration | variable.language | constant.language",  # noqa: E501
+    sublime.KIND_TYPE: "entity.name.type | entity.name.class | entity.name.enum | entity.name.trait | entity.name.struct | entity.name.impl | entity.name.interface | entity.name.union | support.type | support.class",  # noqa: E501
+    sublime.KIND_FUNCTION: "entity.name.function | entity.name.method | entity.name.macro | meta.method entity.name.function | support.function | meta.function-call variable.function | meta.function-call support.function | support.method | meta.method-call variable.function",  # noqa: E501
+    sublime.KIND_NAMESPACE: "entity.name.module | entity.name.namespace | support.module | support.namespace",
+    sublime.KIND_NAVIGATION: "entity.name.definition | entity.name.label | entity.name.section",
+    sublime.KIND_MARKUP: "entity.other.attribute-name | entity.name.tag | meta.toc-list.id.html",
+    sublime.KIND_VARIABLE: "entity.name.constant | constant.other | support.constant | variable.other | variable.parameter | variable.other.member | variable.other.readwrite.member"  # noqa: E501
+}
+
+DIAGNOSTIC_SEVERITY_SCOPES: dict[DiagnosticSeverity, str] = {
+    DiagnosticSeverity.Error: 'region.redish markup.error.lsp',
+    DiagnosticSeverity.Warning: 'region.yellowish markup.warning.lsp',
+    DiagnosticSeverity.Information: 'region.bluish markup.info.lsp',
+    DiagnosticSeverity.Hint: 'region.bluish markup.info.hint.lsp'
+}
+
+DIAGNOSTIC_TAG_SCOPES: dict[DiagnosticTag, str] = {
+    DiagnosticTag.Unnecessary: 'markup.unnecessary.lsp',
+    DiagnosticTag.Deprecated: 'markup.deprecated.lsp'
+}
+
+SUPPORTED_DIAGNOSTIC_TAGS = list(DIAGNOSTIC_TAG_SCOPES)
+
+DOCUMENT_HIGHLIGHT_KIND_SCOPES: dict[DocumentHighlightKind, str] = {
+    DocumentHighlightKind.Text: "region.bluish markup.highlight.text.lsp",
+    DocumentHighlightKind.Read: "region.greenish markup.highlight.read.lsp",
+    DocumentHighlightKind.Write: "region.yellowish markup.highlight.write.lsp"
+}
+
+CODE_ACTION_ANNOTATION_SCOPE = 'region.bluish markup.accent.codeaction.lsp'
+CODE_LENS_ANNOTATION_SCOPE = 'region.greenish markup.accent.codelens.lsp'
+SIGNATURE_HELP_FUNCTION_SCOPE = 'meta.signature-help.lsp'
+SIGNATURE_HELP_ACTIVE_PARAMETER_SCOPE = 'meta.signature-help.parameter.lsp variable.parameter.sighelp.active.lsp'
+SIGNATURE_HELP_INACTIVE_PARAMETER_SCOPE = 'meta.signature-help.parameter.lsp'
+LIGHTBULB_SCOPE = 'region.yellowish lightbulb.lsp'
+
+COMMAND_TO_CHANGE_EVENT_ACTION: dict[str, ChangeEventAction] = {
+    'cut': ChangeEventAction.CUT,
+    'duplicate_line': ChangeEventAction.OTHER,
+    'paste': ChangeEventAction.PASTE,
+    'paste_and_indent': ChangeEventAction.PASTE,
+    'redo': ChangeEventAction.REDO,
+    'redo_or_repeat': ChangeEventAction.REDO,
+    'soft_redo': ChangeEventAction.REDO,
+    'soft_undo': ChangeEventAction.UNDO,
+    'undo': ChangeEventAction.UNDO,
+}
+
+# These are the "exceptional" base scopes. If a base scope is not in this map, nor the first two components or more
+# match any of the entries here, then the rule is that we split the base scope on the ".", and take the second
+# component. The resulting string is assumed to be the language ID. The official list is maintained at
+# https://microsoft.github.io/language-server-protocol/specification#textDocumentItem
+LANGUAGE_IDENTIFIERS: dict[str, str] = {
+    "source.c++": LanguageKind.CPP,
+    "source.coffee": LanguageKind.Coffeescript,
+    "source.cs": LanguageKind.CSharp,
+    "source.dosbatch": LanguageKind.WindowsBat,
+    "source.fixedform-fortran": "fortran",  # https://packagecontrol.io/packages/Fortran
+    "source.git.commit": LanguageKind.GitCommit,
+    "source.git.rebase": LanguageKind.GitRebase,
+    "source.js": LanguageKind.JavaScript,
+    "source.js.react": LanguageKind.JavaScriptReact,  # https://github.com/Thom1729/Sublime-JS-Custom
+    "source.json-tmlanguage": "jsonc",  # https://github.com/SublimeText/PackageDev
+    "source.json.sublime": "jsonc",  # https://github.com/SublimeText/PackageDev
+    "source.jsx": LanguageKind.JavaScriptReact,
+    "source.Kotlin": "kotlin",  # https://github.com/vkostyukov/kotlin-sublime-package
+    "source.modern-fortran": "fortran",  # https://packagecontrol.io/packages/Fortran
+    "source.objc": LanguageKind.ObjectiveC,
+    "source.objc++": LanguageKind.ObjectiveCPP,
+    "source.shader": LanguageKind.ShaderLab,  # https://github.com/waqiju/unity_shader_st3
+    "source.shell": LanguageKind.ShellScript,
+    "source.ts": LanguageKind.TypeScript,
+    "source.ts.react": LanguageKind.TypeScriptReact,  # https://github.com/Thom1729/Sublime-JS-Custom
+    "source.tsx": LanguageKind.TypeScriptReact,
+    "source.unity.unity_shader": LanguageKind.ShaderLab,  # https://github.com/petereichinger/Unity3D-Shader
+    "source.yaml-tmlanguage": LanguageKind.YAML,  # https://github.com/SublimeText/PackageDev
+    "source.yaml.helm": 'helm',  # https://github.com/SublimeText/YamlPipelines
+    "text.advanced_csv": "csv",  # https://github.com/SublimeText/AFileIcon
+    "text.django": LanguageKind.HTML,  # https://github.com/willstott101/django-sublime-syntax
+    "text.html.handlebars": LanguageKind.Handlebars,
+    "text.html.markdown": LanguageKind.Markdown,
+    "text.html.markdown.rmarkdown": LanguageKind.R,  # https://github.com/REditorSupport/sublime-ide-r
+    "text.html.rails": "erb",
+    "text.html.vue": "vue",
+    "text.jinja": LanguageKind.HTML,  # https://github.com/Sublime-Instincts/BetterJinja
+    "text.plain": "plaintext",
+    "text.plist": LanguageKind.XML,  # https://bitbucket.org/fschwehn/sublime_plist
+    "text.tex.latex": LanguageKind.LaTeX,
+    "text.xml.xsl": LanguageKind.XSL,
+}
+
+SEMANTIC_TOKENS_MAP = {
+    "namespace": "variable.other.namespace.lsp",
+    "namespace.declaration": "entity.name.namespace.lsp",
+    "namespace.definition": "entity.name.namespace.lsp",
+    "type": "storage.type.lsp",
+    "type.declaration": "entity.name.type.lsp",
+    "type.defaultLibrary": "support.type.lsp",
+    "type.definition": "entity.name.type.lsp",
+    "class": "storage.type.class.lsp",
+    "class.declaration": "entity.name.class.lsp",
+    "class.defaultLibrary": "support.class.lsp",
+    "class.definition": "entity.name.class.lsp",
+    "enum": "variable.other.enum.lsp",
+    "enum.declaration": "entity.name.enum.lsp",
+    "enum.definition": "entity.name.enum.lsp",
+    "interface": "entity.other.inherited-class.lsp",
+    "interface.declaration": "entity.name.interface.lsp",
+    "interface.definition": "entity.name.interface.lsp",
+    "struct": "storage.type.struct.lsp",
+    "struct.declaration": "entity.name.struct.lsp",
+    "struct.defaultLibrary": "support.struct.lsp",
+    "struct.definition": "entity.name.struct.lsp",
+    "typeParameter": "variable.parameter.type.lsp",
+    "parameter": "variable.parameter.lsp",
+    "variable": "variable.other.lsp",
+    "variable.readonly": "variable.other.constant.lsp",
+    "property": "variable.other.property.lsp",
+    "enumMember": "constant.other.enum.lsp",
+    "event": "entity.name.function.lsp",
+    "function": "variable.function.lsp",
+    "function.declaration": "entity.name.function.lsp",
+    "function.defaultLibrary": "support.function.builtin.lsp",
+    "function.definition": "entity.name.function.lsp",
+    "method": "variable.function.lsp",
+    "method.declaration": "entity.name.function.lsp",
+    "method.defaultLibrary": "support.function.builtin.lsp",
+    "method.definition": "entity.name.function.lsp",
+    "macro": "variable.macro.lsp",
+    "macro.declaration": "entity.name.macro.lsp",
+    "macro.defaultLibrary": "support.macro.lsp",
+    "macro.definition": "entity.name.macro.lsp",
+    "keyword": "keyword.lsp",
+    "modifier": "storage.modifier.lsp",
+    "comment": "comment.lsp",
+    "comment.documentation": "comment.block.documentation.lsp",
+    "string": "string.lsp",
+    "number": "constant.numeric.lsp",
+    "regexp": "string.regexp.lsp",
+    "operator": "keyword.operator.lsp",
+    "decorator": "variable.annotation.lsp",
+    "label": "entity.name.label.lsp",
+}

@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[FormParameters = New Structure;
+FormParameters.Insert("$0", );
+OpenForm("AccumulationRegister.${1:ChooseAnAccumulationRegister}.${2:ChooseForm}", FormParameters);]]></content>
+	<tabTrigger>OpenForm</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Open an accumulation register form (with parameters)</description>
+</snippet>

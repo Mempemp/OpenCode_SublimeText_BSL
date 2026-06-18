@@ -1,0 +1,20 @@
+<snippet>
+	<content><![CDATA[// <Function description>
+//
+//
+// Parameters:
+//  <Parameter1>  - <Type.Subtype> - <parameter description>
+//                 <parameter description continued>
+//  <Parameter2>  - <Type.Subtype> - <parameter description>
+//                 <parameter description continued>
+//
+// Returns:
+//   <Type.Subtype>   - <returned value description>
+//
+Function ${1:FunctionName}()
+	$0
+EndFunction // ${1:FunctionName}()]]></content>
+	<tabTrigger>Function</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Function (with header)</description>
+</snippet>

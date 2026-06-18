@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA[DoQueryBox("${1:PromptText}", ${2:DialogPrompt}) = ${3:DialogReturnCode}]]></content>
+	<tabTrigger>DoQueryBox</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Conditional Prompt</description>
+</snippet>

@@ -1,0 +1,30 @@
+body {
+    margin: 0;
+    border-width: 0;
+    font-family: system;
+}
+p {
+    display: inline;
+}
+code {
+    font-family: monospace;
+    padding: 0.05rem 0.25rem;
+}
+.osx code {
+    font-size: 0.9rem;
+}
+.error {
+    color: color(var(--redish) alpha(0.85));
+}
+.warning {
+    color: color(var(--yellowish) alpha(0.85));
+}
+.information {
+    color: color(var(--bluish) alpha(0.85));
+}
+.hint {
+    color: color(var(--bluish) alpha(0.85));
+}
+.color-muted {
+    color: color(var(--foreground) alpha(0.6));
+}

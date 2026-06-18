@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[Если ТипЗнч(${1:ВыражениеДляПроверкиТипа}) = Тип("${2:ВыберитеТип}") Тогда
+	$0
+КонецЕсли;]]></content>
+	<tabTrigger>ПроверитьТип</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Проверка типа</description>
+</snippet>

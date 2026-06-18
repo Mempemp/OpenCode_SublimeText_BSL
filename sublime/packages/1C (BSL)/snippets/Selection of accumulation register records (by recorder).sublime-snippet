@@ -1,0 +1,8 @@
+<snippet>
+	<content><![CDATA[Selection = AccumulationRegister.${1:ChooseAnAccumulationRegister}.SelectByRecorder($0);
+While Selection.Next() Do
+EndDo;]]></content>
+	<tabTrigger>AccumulationRegisterSelectByRecorder</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Selection of accumulation register records (by recorder)</description>
+</snippet>

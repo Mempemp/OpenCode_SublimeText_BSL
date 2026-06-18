@@ -1,0 +1,6 @@
+<snippet>
+	<content><![CDATA[Формат($0, "$1")]]></content>
+	<tabTrigger>Формат</tabTrigger>
+	<scope>source.bsl</scope>
+	<description>Формат</description>
+</snippet>
