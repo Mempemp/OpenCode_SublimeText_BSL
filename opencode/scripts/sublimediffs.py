@@ -5,11 +5,16 @@ import subprocess
 import json
 import re
 
+# Force UTF-8 everywhere — Windows PowerShell garbles cp1251
+os.environ["PYTHONIOENCODING"] = "utf-8"
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
 
 def load_config():
-    with open(CONFIG_PATH) as f:
+    with open(CONFIG_PATH, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -17,7 +22,7 @@ def git_root():
     try:
         return subprocess.check_output(
             ["git", "rev-parse", "--show-toplevel"],
-            text=True, stderr=subprocess.DEVNULL
+            text=True, encoding="utf-8", stderr=subprocess.DEVNULL
         ).strip()
     except Exception:
         return os.getcwd()
@@ -34,7 +39,7 @@ def main():
         files = subprocess.check_output(
             ["git", "-c", "core.quotePath=false", "diff", "HEAD",
              "--name-only", "--diff-filter=ACMRT"],
-            text=True, stderr=subprocess.DEVNULL
+            text=True, encoding="utf-8", stderr=subprocess.DEVNULL
         ).strip()
     except Exception:
         print("Not a git repository")
@@ -53,7 +58,8 @@ def main():
             print(f"No files matching '{mask}'")
             sys.exit(0)
 
-    full_paths = [os.path.join(root, p) for p in paths]
+    # Normalize to Windows backslashes for subl.exe
+    full_paths = [os.path.normpath(os.path.join(root, p)) for p in paths]
     subprocess.run([subl] + full_paths, shell=False)
     print(f"Opened {len(paths)} file(s) in Sublime")
 

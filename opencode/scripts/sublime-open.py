@@ -5,11 +5,16 @@ import subprocess
 import glob as globmod
 import json
 
+# Force UTF-8 everywhere — Windows PowerShell garbles cp1251
+os.environ["PYTHONIOENCODING"] = "utf-8"
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
 
 def load_config():
-    with open(CONFIG_PATH) as f:
+    with open(CONFIG_PATH, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -17,7 +22,7 @@ def git_root():
     try:
         return subprocess.check_output(
             ["git", "rev-parse", "--show-toplevel"],
-            text=True, stderr=subprocess.DEVNULL
+            text=True, encoding="utf-8", stderr=subprocess.DEVNULL
         ).strip()
     except Exception:
         return os.getcwd()
@@ -28,7 +33,7 @@ def git_ls_files(pattern):
     try:
         out = subprocess.check_output(
             ["git", "-c", "core.quotePath=false", "ls-files", f"*{pattern}*"],
-            text=True, stderr=subprocess.DEVNULL
+            text=True, encoding="utf-8", stderr=subprocess.DEVNULL
         ).strip()
         return [f for f in out.split("\n") if f]
     except Exception:
@@ -97,7 +102,7 @@ def main():
         else:
             print(f"  {name} -> NOT FOUND (opening as new)")
 
-    subprocess.run([subl] + resolved, shell=False)
+    subprocess.run([subl] + [os.path.normpath(p) for p in resolved], shell=False)
     print(f"Opened {len(names)} file(s) in Sublime")
 
 
